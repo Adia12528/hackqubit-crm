@@ -1,0 +1,128 @@
+name: hackqubit-crm
+
+services:
+  # ---------------------------------------------------------------------
+  # Relational database (MariaDB — MySQL-compatible, what EspoCRM expects)
+  # ---------------------------------------------------------------------
+  espocrm-db:
+    image: mariadb:11
+    container_name: espocrm-db
+    restart: always
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-espocrm}
+      MARIADB_USER: ${DB_USER:-espocrm}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - espocrm-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [crm-network]
+
+  # ---------------------------------------------------------------------
+  # Object/file storage (MinIO — S3-compatible) for documents & call
+  # recordings. EspoCRM is wired to use this as its file storage (see
+  # scripts/configure-s3-storage.sh) instead of local disk.
+  # ---------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: crm-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"   # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web console
+    volumes:
+      - minio-data:/data
+    networks: [crm-network]
+
+  # One-shot: creates the bucket EspoCRM will store files in. Retries
+  # until MinIO is actually ready, then exits — this is not a long-running
+  # service.
+  minio-init:
+    image: minio/mc:latest
+    container_name: crm-minio-init
+    depends_on: [minio]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      MINIO_BUCKET: ${MINIO_BUCKET:-espocrm-files}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"; do
+        echo 'Waiting for MinIO...'; sleep 2;
+      done;
+      mc mb --ignore-existing local/\"$$MINIO_BUCKET\";
+      echo 'MinIO bucket ready: '\"$$MINIO_BUCKET\";
+      "
+    networks: [crm-network]
+
+  # ---------------------------------------------------------------------
+  # EspoCRM — main web app (serves the UI + REST API)
+  # ---------------------------------------------------------------------
+  espocrm:
+    image: espocrm/espocrm:latest
+    container_name: espocrm
+    restart: always
+    depends_on:
+      espocrm-db:
+        condition: service_healthy
+    environment:
+      ESPOCRM_DATABASE_PLATFORM: Mysql
+      ESPOCRM_DATABASE_HOST: espocrm-db
+      ESPOCRM_DATABASE_NAME: ${DB_NAME:-espocrm}
+      ESPOCRM_DATABASE_USER: ${DB_USER:-espocrm}
+      ESPOCRM_DATABASE_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      ESPOCRM_ADMIN_USERNAME: ${ESPOCRM_ADMIN_USERNAME:-admin}
+      ESPOCRM_ADMIN_PASSWORD: ${ESPOCRM_ADMIN_PASSWORD:?set ESPOCRM_ADMIN_PASSWORD in .env}
+      ESPOCRM_SITE_URL: ${ESPOCRM_SITE_URL:-http://localhost:8080}
+      ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
+      ESPOCRM_CONFIG_WEB_SOCKET_URL: ${ESPOCRM_WEBSOCKET_URL:-ws://localhost:8081}
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: "tcp://*:7777"
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: "tcp://espocrm-websocket:7777"
+    ports:
+      - "${ESPOCRM_PORT:-8080}:80"
+    volumes:
+      - espocrm-data:/var/www/html
+    networks: [crm-network]
+
+  # Background jobs: email fetching, scheduled workflows, reminders, etc.
+  # Without this, inbound email and queued jobs never run.
+  espocrm-daemon:
+    image: espocrm/espocrm:latest
+    container_name: espocrm-daemon
+    restart: always
+    depends_on: [espocrm]
+    volumes_from: [espocrm]
+    entrypoint: docker-daemon.sh
+    networks: [crm-network]
+
+  # Real-time updates (live notifications, stream updates) over WebSocket.
+  espocrm-websocket:
+    image: espocrm/espocrm:latest
+    container_name: espocrm-websocket
+    restart: always
+    depends_on: [espocrm]
+    environment:
+      ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: "tcp://espocrm-websocket:7777"
+    ports:
+      - "${ESPOCRM_WEBSOCKET_PORT:-8081}:8080"
+    volumes_from: [espocrm]
+    entrypoint: docker-websocket.sh
+    networks: [crm-network]
+
+networks:
+  crm-network:
+    driver: bridge
+
+volumes:
+  espocrm-db-data:
+  espocrm-data:
+  minio-data:
