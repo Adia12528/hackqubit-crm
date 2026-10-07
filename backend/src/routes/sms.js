@@ -1,9 +1,33 @@
 const express = require('express');
-const axios = require('axios');
 const pool = require('../db/pool');
 const { authenticate, authorize } = require('../middleware/auth');
+const smsService = require('../services/communication/sms.service');
 
 const router = express.Router();
+
+// POST /api/sms/webhook - Twilio inbound webhook with identity resolution
+router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const { From, Body, MessageSid } = req.body;
+    const io = req.app.get('io');
+
+    await smsService.processInbound({
+      from: From,
+      body: Body,
+      messageSid: MessageSid,
+      io,
+    });
+
+    // TwiML empty response
+    res.set('Content-Type', 'text/xml');
+    res.send('<Response></Response>');
+  } catch (err) {
+    console.error('SMS webhook error:', err);
+    res.status(500).send('<Response></Response>');
+  }
+});
+
+// All routes below need authentication
 router.use(authenticate);
 
 // GET /api/sms - list SMS for a contact
@@ -30,79 +54,20 @@ router.get('/', async (req, res) => {
 router.post('/send', authorize('agent'), async (req, res) => {
   try {
     const { contact_id, phone_number, content } = req.body;
+    const io = req.app.get('io');
 
-    let twilioSid = null;
-    let status = 'sent';
+    const result = await smsService.sendMessage({
+      contact_id,
+      agent_id: req.user.id,
+      phone_number,
+      content,
+      io,
+    });
 
-    try {
-      // Twilio REST API call
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
-      const response = await axios.post(
-        twilioUrl,
-        new URLSearchParams({
-          From: process.env.TWILIO_PHONE_NUMBER,
-          To: phone_number,
-          Body: content,
-        }),
-        {
-          auth: {
-            username: process.env.TWILIO_ACCOUNT_SID,
-            password: process.env.TWILIO_AUTH_TOKEN,
-          },
-        }
-      );
-      twilioSid = response.data.sid;
-      status = response.data.status;
-    } catch (twilioErr) {
-      console.error('Twilio error:', twilioErr.response?.data);
-      status = 'failed';
-    }
-
-    const { rows } = await pool.query(
-      `INSERT INTO sms_messages (contact_id, agent_id, direction, content, phone_number, twilio_sid, status)
-       VALUES ($1,$2,'outbound',$3,$4,$5,$6) RETURNING *`,
-      [contact_id, req.user.id, content, phone_number, twilioSid, status]
-    );
-
-    res.json({ sms: rows[0], status });
+    res.json(result);
   } catch (err) {
+    console.error('SMS send error:', err);
     res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /api/sms/webhook - Twilio inbound webhook
-router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
-  try {
-    const { From, Body, MessageSid } = req.body;
-
-    // Find contact
-    const { rows: contacts } = await pool.query(
-      'SELECT id FROM contacts WHERE phone = $1 OR whatsapp_number = $1 LIMIT 1',
-      [From]
-    );
-
-    let contactId = contacts[0]?.id;
-    if (!contactId) {
-      const { rows } = await pool.query(
-        `INSERT INTO contacts (full_name, phone, source, status)
-         VALUES ($1,$1,'sms','lead') RETURNING id`,
-        [From]
-      );
-      contactId = rows[0].id;
-    }
-
-    await pool.query(
-      `INSERT INTO sms_messages (contact_id, direction, content, phone_number, twilio_sid, status)
-       VALUES ($1,'inbound',$2,$3,$4,'received')`,
-      [contactId, Body, From, MessageSid]
-    );
-
-    // TwiML empty response
-    res.set('Content-Type', 'text/xml');
-    res.send('<Response></Response>');
-  } catch (err) {
-    console.error('SMS webhook error:', err);
-    res.status(500).send('<Response></Response>');
   }
 });
 

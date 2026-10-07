@@ -223,7 +223,7 @@ body {
 }
 
 .user-info { flex: 1; min-width: 0; }
-.user-info .name { font-size: 13px; font-weight: 600; truncate: ellipsis; white-space: nowrap; overflow: hidden; }
+.user-info .name { font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
 .user-info .role { font-size: 11px; color: var(--text-muted); }
 
 .role-badge {
@@ -706,11 +706,108 @@ tbody tr:last-child { border-bottom: none; }
 }
 
 /* ====================================
+   PROFILE 360 & TABS
+   ==================================== */
+.profile-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  background: var(--bg-secondary);
+  overflow-x: auto;
+}
+.profile-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.profile-tab-btn:hover {
+  color: var(--text-primary);
+}
+.profile-tab-btn.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+  font-weight: 600;
+}
+.profile-tab-badge {
+  font-size: 11px;
+  background: var(--bg-card);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+}
+
+/* ====================================
+   UNIFIED INBOX LAYOUT
+   ==================================== */
+.inbox-container {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  height: calc(100vh - 110px);
+}
+.inbox-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.inbox-chat-pane {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.inbox-item {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.inbox-item:hover {
+  background: var(--bg-hover);
+}
+.inbox-item.active {
+  background: rgba(59, 130, 246, 0.08);
+  border-left: 3px solid var(--blue);
+}
+
+/* ====================================
+   ADDITIONAL STATUS BADGES & CHIPS
+   ==================================== */
+.channel-chip.note { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
+.channel-chip.deal { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+.channel-chip.offer { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+.channel-chip.campaign { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.channel-chip.task { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; }
+
+.timeline-dot.note { background: #64748b; }
+.timeline-dot.deal { background: #8b5cf6; }
+.timeline-dot.offer { background: #ec4899; }
+.timeline-dot.campaign { background: #f97316; }
+.timeline-dot.task { background: #14b8a6; }
+
+/* ====================================
    RESPONSIVE
    ==================================== */
 @media (max-width: 1024px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .grid-contact { grid-template-columns: 1fr; }
+  .inbox-container { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {

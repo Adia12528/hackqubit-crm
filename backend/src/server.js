@@ -13,6 +13,12 @@ const { initBuckets } = require('./config/minio');
 // Routes
 const authRoutes = require('./routes/auth');
 const contactRoutes = require('./routes/contacts');
+const inboxRoutes = require('./routes/inbox');
+const campaignRoutes = require('./routes/campaigns');
+const offerRoutes = require('./routes/offers');
+const templateRoutes = require('./routes/templates');
+const dealRoutes = require('./routes/deals');
+const taskRoutes = require('./routes/tasks');
 const callRoutes = require('./routes/calls');
 const whatsappRoutes = require('./routes/whatsapp');
 const emailRoutes = require('./routes/emails');
@@ -70,6 +76,12 @@ app.use('/api', limiter);
 // =============================================
 app.use('/api/auth', authRoutes);
 app.use('/api/contacts', contactRoutes);
+app.use('/api/inbox', inboxRoutes);
+app.use('/api/campaigns', campaignRoutes);
+app.use('/api/offers', offerRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/deals', dealRoutes);
+app.use('/api/tasks', taskRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/emails', emailRoutes);
@@ -98,10 +110,16 @@ const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
-    // Test DB
+    // Test DB & Run Migrations
     try {
       await pool.query('SELECT 1');
       console.log('✅ Database connection OK');
+      try {
+        const { runMigration } = require('./db/migrate');
+        await runMigration();
+      } catch (migErr) {
+        console.warn('⚠️ Auto-migration notice:', migErr.message);
+      }
     } catch (dbErr) {
       console.warn('⚠️ PostgreSQL is not reachable at localhost:5432 (' + dbErr.message + '). Database features will be offline until PostgreSQL starts.');
     }

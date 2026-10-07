@@ -1,14 +1,14 @@
 const express = require('express');
 const multer = require('multer');
-const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
 const { authenticate, authorize } = require('../middleware/auth');
-const { minioClient, BUCKETS, getPresignedUrl, uploadFile } = require('../config/minio');
+const { BUCKETS, getPresignedUrl, uploadFile } = require('../config/minio');
+const callService = require('../services/communication/call.service');
 
 const router = express.Router();
 router.use(authenticate);
 
-// Multer for in-memory upload (then pushed to MinIO)
+// Multer for in-memory upload (pushed to MinIO)
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
@@ -56,16 +56,18 @@ router.get('/', async (req, res) => {
 router.post('/start', authorize('agent'), async (req, res) => {
   try {
     const { contact_id, direction, phone_number, sip_call_id } = req.body;
-    const callId = uuidv4();
+    const io = req.app.get('io');
 
-    const { rows } = await pool.query(
-      `INSERT INTO call_recordings (id, contact_id, agent_id, direction, phone_number, sip_call_id, 
-        call_status, started_at)
-       VALUES ($1,$2,$3,$4,$5,$6,'active',NOW()) RETURNING *`,
-      [callId, contact_id, req.user.id, direction, phone_number, sip_call_id]
-    );
+    const call = await callService.startCall({
+      contact_id,
+      agent_id: req.user.id,
+      direction,
+      phone_number,
+      sip_call_id,
+      io,
+    });
 
-    res.status(201).json({ call: rows[0] });
+    res.status(201).json({ call });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -77,17 +79,20 @@ router.post('/:id/end', authorize('agent'), upload.single('recording'), async (r
     const { notes, duration_seconds } = req.body;
     let recording_url = null;
 
-    // Upload recording to MinIO if provided
     if (req.file) {
-      const objectName = `${req.params.id}/${Date.now()}.${req.file.mimetype.split('/')[1]}`;
-      await uploadFile(
-        BUCKETS.RECORDINGS,
-        objectName,
-        req.file.buffer,
-        req.file.size,
-        req.file.mimetype
-      );
-      recording_url = objectName;
+      try {
+        const objectName = `${req.params.id}/${Date.now()}.${req.file.mimetype.split('/')[1] || 'webm'}`;
+        await uploadFile(
+          BUCKETS.RECORDINGS,
+          objectName,
+          req.file.buffer,
+          req.file.size,
+          req.file.mimetype
+        );
+        recording_url = objectName;
+      } catch (minioErr) {
+        console.warn('MinIO upload unavailable:', minioErr.message);
+      }
     }
 
     const { rows } = await pool.query(
@@ -95,10 +100,14 @@ router.post('/:id/end', authorize('agent'), upload.single('recording'), async (r
         call_status='completed', notes=$1, duration_seconds=$2,
         recording_url=$3, recording_size_bytes=$4, ended_at=NOW()
        WHERE id=$5 RETURNING *`,
-      [notes, duration_seconds, recording_url, req.file?.size || 0, req.params.id]
+      [notes, duration_seconds || 0, recording_url, req.file?.size || 0, req.params.id]
     );
 
-    res.json({ call: rows[0] });
+    const call = rows[0];
+    const io = req.app.get('io');
+    if (io) io.emit('call_update', { contact_id: call?.contact_id, call, action: 'ended' });
+
+    res.json({ call });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -123,19 +132,24 @@ router.get('/:id/recording', async (req, res) => {
   }
 });
 
-// POST /api/calls/log - log completed call directly (no recording)
+// POST /api/calls/log - log completed call directly
 router.post('/log', authorize('agent'), async (req, res) => {
   try {
     const { contact_id, direction, phone_number, duration_seconds, notes, call_status } = req.body;
+    const io = req.app.get('io');
 
-    const { rows } = await pool.query(
-      `INSERT INTO call_recordings (contact_id, agent_id, direction, phone_number, 
-        duration_seconds, notes, call_status, started_at, ended_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW()-($5 || ' seconds')::interval,NOW()) RETURNING *`,
-      [contact_id, req.user.id, direction, phone_number, duration_seconds || 0, notes, call_status || 'completed']
-    );
+    const call = await callService.logCall({
+      contact_id,
+      agent_id: req.user.id,
+      direction,
+      phone_number,
+      duration_seconds,
+      notes,
+      call_status,
+      io,
+    });
 
-    res.status(201).json({ call: rows[0] });
+    res.status(201).json({ call });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }

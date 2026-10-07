@@ -1,464 +1,314 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { formatDistanceToNow } from 'date-fns';
 import { 
+  Users, 
+  Search, 
+  Plus, 
+  Filter, 
   Phone, 
   MessageSquare, 
   Mail, 
-  Smartphone, 
-  MapPin, 
-  Play, 
+  Building, 
   Clock, 
-  Inbox, 
-  Plus, 
-  Search, 
-  X, 
-  ArrowDownLeft, 
-  ArrowUpRight 
+  ChevronRight, 
+  X,
+  Briefcase
 } from 'lucide-react';
+import Contact360Profile from '../components/Contact360Profile';
 
-// ========== Unified Timeline Item ==========
-function TimelineItem({ item }) {
-  const CHANNEL_CONFIG = {
-    call: { icon: Phone, label: 'Call', className: 'call' },
-    whatsapp: { icon: MessageSquare, label: 'WhatsApp', className: 'whatsapp' },
-    email: { icon: Mail, label: 'Email', className: 'email' },
-    sms: { icon: Smartphone, label: 'SMS', className: 'sms' },
-  };
-
-  const cfg = CHANNEL_CONFIG[item.channel] || { icon: MessageSquare, label: item.channel, className: 'call' };
-  const Icon = cfg.icon;
-  const data = item.data || {};
-
-  const renderBody = () => {
-    switch (item.channel) {
-      case 'call':
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className={`status-badge status-${data.status || 'completed'}`}>{data.status}</span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {data.direction === 'inbound' ? <ArrowDownLeft size={13} style={{ color: '#8b5cf6' }} /> : <ArrowUpRight size={13} style={{ color: '#3b82f6' }} />}
-              <span>{data.direction === 'inbound' ? 'Inbound' : 'Outbound'}</span>
-            </span>
-            {data.duration > 0 && (
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Clock size={12} />
-                <span>{Math.floor(data.duration / 60)}m {data.duration % 60}s</span>
-              </span>
-            )}
-            {data.recording_url && (
-              <button className="btn btn-ghost btn-sm" onClick={() => {/* play recording */}} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Play size={11} />
-                <span>Play</span>
-              </button>
-            )}
-          </div>
-        );
-      case 'whatsapp':
-      case 'sms':
-        return <div className="timeline-body">{data.content?.substring(0, 120)}{data.content?.length > 120 ? '...' : ''}</div>;
-      case 'email':
-        return <div className="timeline-body" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={13} /> {data.subject}</div>;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="timeline-item">
-      <div className={`timeline-dot ${cfg.className}`}>
-        <Icon size={13} />
-      </div>
-      <div className="timeline-content">
-        <div className="timeline-header">
-          <span className={`channel-chip ${cfg.className}`}>{cfg.label}</span>
-          <span className="timeline-time">
-            {item.occurred_at ? formatDistanceToNow(new Date(item.occurred_at), { addSuffix: true }) : ''}
-          </span>
-        </div>
-        {renderBody()}
-      </div>
-    </div>
-  );
-}
-
-// ========== Send Message Modal ==========
-function SendModal({ contact, channel, onClose, onSent }) {
-  const [content, setContent] = useState('');
-  const [subject, setSubject] = useState('');
-  const [sending, setSending] = useState(false);
-
-  const handleSend = async () => {
-    setSending(true);
-    try {
-      const phoneNumber = contact.whatsapp_number || contact.phone;
-      if (channel === 'whatsapp') {
-        await api.post('/whatsapp/send', { contact_id: contact.id, phone_number: phoneNumber, message: content });
-      } else if (channel === 'email') {
-        await api.post('/emails/send', { contact_id: contact.id, to_address: contact.email, subject, body: content });
-      } else if (channel === 'sms') {
-        await api.post('/sms/send', { contact_id: contact.id, phone_number: phoneNumber, content });
-      }
-      toast.success(`${channel} sent!`);
-      onSent();
-      onClose();
-    } catch (err) {
-      toast.error('Failed to send. Check API config.');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-header">
-          <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {channel === 'whatsapp' && <MessageSquare size={16} style={{ color: '#25D366' }} />} 
-            {channel === 'email' && <Mail size={16} style={{ color: '#3B82F6' }} />} 
-            {channel === 'sms' && <Smartphone size={16} style={{ color: '#F59E0B' }} />}
-            <span>Dispatch {channel.charAt(0).toUpperCase() + channel.slice(1)}</span>
-          </div>
-          <button className="modal-close" onClick={onClose}><X size={14} /></button>
-        </div>
-
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-          To: <strong>{contact.full_name}</strong> ({channel === 'email' ? contact.email : contact.phone})
-        </p>
-
-        {channel === 'email' && (
-          <div className="form-group">
-            <label className="form-label">Subject</label>
-            <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject..." />
-          </div>
-        )}
-
-        <div className="form-group">
-          <label className="form-label">Message</label>
-          <textarea
-            className="form-textarea"
-            value={content}
-            onChange={e => setContent(e.target.value)}
-            placeholder={`Type your ${channel} message...`}
-            rows={4}
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSend} disabled={sending || !content.trim()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Send size={14} />
-            <span>{sending ? 'Sending...' : 'Send Message'}</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ========== Contact Form Modal ==========
+// ========== Contact Creation / Edit Modal ==========
 function ContactFormModal({ contact, onClose, onSaved }) {
-  const [form, setForm] = useState(contact || { status: 'lead', source: 'manual' });
+  const [form, setForm] = useState(contact || { status: 'lead', source: 'manual', tags: [] });
+  const [tagsInput, setTagsInput] = useState((contact?.tags || []).join(', '));
   const [saving, setSaving] = useState(false);
 
-  const handleSave = async () => {
+  const handleSave = async (e) => {
+    e.preventDefault();
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
+      };
+
       if (contact?.id) {
-        await api.put(`/contacts/${contact.id}`, form);
+        await api.put(`/contacts/${contact.id}`, payload);
       } else {
-        await api.post('/contacts', form);
+        await api.post('/contacts', payload);
       }
-      toast.success(contact?.id ? 'Contact updated!' : 'Contact created!');
+      toast.success(contact?.id ? 'Customer updated!' : 'Customer profile created!');
       onSaved();
       onClose();
     } catch (err) {
-      toast.error('Failed to save contact');
+      toast.error('Failed to save customer');
     } finally {
       setSaving(false);
     }
   };
 
-  const f = (field) => ({ value: form[field] || '', onChange: e => setForm(p => ({ ...p, [field]: e.target.value })) });
+  const f = (field) => ({
+    value: form[field] || '',
+    onChange: e => setForm(p => ({ ...p, [field]: e.target.value })),
+  });
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: '600px' }}>
+      <div className="modal" style={{ maxWidth: '640px' }}>
         <div className="modal-header">
-          <div className="modal-title">{contact?.id ? 'Edit Contact' : '➕ New Contact'}</div>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <div className="modal-title">
+            {contact?.id ? 'Edit Customer Profile' : '➕ Create New Customer Profile'}
+          </div>
+          <button className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
 
-        <div className="grid-2">
-          <div className="form-group"><label className="form-label">Full Name *</label><input className="form-input" {...f('full_name')} placeholder="John Doe" /></div>
-          <div className="form-group"><label className="form-label">Company</label><input className="form-input" {...f('company')} placeholder="Acme Corp" /></div>
-          <div className="form-group"><label className="form-label">Email</label><input className="form-input" type="email" {...f('email')} placeholder="john@acme.com" /></div>
-          <div className="form-group"><label className="form-label">Phone</label><input className="form-input" {...f('phone')} placeholder="+91 98765 43210" /></div>
-          <div className="form-group"><label className="form-label">WhatsApp Number</label><input className="form-input" {...f('whatsapp_number')} placeholder="+91 98765 43210" /></div>
-          <div className="form-group"><label className="form-label">Job Title</label><input className="form-input" {...f('job_title')} placeholder="CEO" /></div>
-          <div className="form-group">
-            <label className="form-label">Status</label>
-            <select className="form-select" {...f('status')}>
-              {['lead', 'prospect', 'customer', 'churned', 'inactive'].map(s => (
-                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-              ))}
-            </select>
+        <form onSubmit={handleSave}>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Full Name *</label>
+              <input className="form-input" required placeholder="e.g. Rahul Kumar" {...f('full_name')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Company Name</label>
+              <input className="form-input" placeholder="e.g. Acme Corp" {...f('company')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email Address</label>
+              <input className="form-input" type="email" placeholder="rahul@enterprise.com" {...f('email')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Phone (Voice/SMS)</label>
+              <input className="form-input" placeholder="+91 98765 43210" {...f('phone')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">WhatsApp Number</label>
+              <input className="form-input" placeholder="+91 98765 43210" {...f('whatsapp_number')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Job Title</label>
+              <input className="form-input" placeholder="e.g. Procurement VP" {...f('job_title')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Customer Lifecycle Status</label>
+              <select className="form-select" {...f('status')}>
+                <option value="lead">Lead</option>
+                <option value="prospect">Prospect</option>
+                <option value="customer">Customer</option>
+                <option value="churned">Churned</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Inbound Acquisition Source</label>
+              <select className="form-select" {...f('source')}>
+                <option value="manual">Manual Entry</option>
+                <option value="whatsapp">WhatsApp Inbound</option>
+                <option value="email">Email Outreach</option>
+                <option value="call">Phone Call</option>
+                <option value="web">Website Form</option>
+                <option value="import">Bulk Import</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <label className="form-label">Tags (comma-separated)</label>
+              <input
+                className="form-input"
+                placeholder="vip, enterprise, retail, priority"
+                value={tagsInput}
+                onChange={e => setTagsInput(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="form-group">
-            <label className="form-label">Source</label>
-            <select className="form-select" {...f('source')}>
-              {['manual', 'whatsapp', 'email', 'call', 'web', 'import'].map(s => (
-                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-              ))}
-            </select>
-          </div>
-        </div>
 
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.full_name}>
-            {saving ? '💾 Saving...' : '💾 Save Contact'}
-          </button>
-        </div>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
 
-// ========== Contact Detail Panel ==========
-function ContactDetail({ contactId, onClose }) {
-  const [data, setData] = useState(null);
-  const [sendModal, setSendModal] = useState(null);
-
-  useEffect(() => {
-    if (!contactId) return;
-    api.get(`/contacts/${contactId}`)
-      .then(({ data }) => setData(data))
-      .catch(() => toast.error('Failed to load contact'));
-  }, [contactId]);
-
-  if (!data) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px' }}>
-      <div className="spinner" />
-    </div>
-  );
-
-  const { contact, timeline = [], deals = [] } = data;
-
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div style={{ padding: '20px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '12px' }}>
-          <div style={{
-            width: '52px', height: '52px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '20px', fontWeight: '800', color: 'white',
-          }}>
-            {contact.full_name?.charAt(0)}
-          </div>
-          <div>
-            <h3 style={{ fontWeight: '700', fontSize: '16px' }}>{contact.full_name}</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{contact.job_title} {contact.company && `@ ${contact.company}`}</p>
-          </div>
-          <span className={`status-badge status-${contact.status}`} style={{ marginLeft: 'auto' }}>{contact.status}</span>
-        </div>
-
-        {/* Contact Info */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', marginBottom: '14px' }}>
-          {contact.email && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={13} /> {contact.email}</div>}
-          {contact.phone && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><Phone size={13} /> {contact.phone}</div>}
-          {contact.whatsapp_number && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><MessageSquare size={13} /> {contact.whatsapp_number}</div>}
-          {contact.city && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={13} /> {contact.city}, {contact.country}</div>}
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          <button className="btn btn-sm" style={{ background: '#10B981', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => toast.success('WebRTC call initiating...')}>
-            <Phone size={13} /> Call
-          </button>
-          {contact.whatsapp_number && (
-            <button className="btn btn-sm" style={{ background: '#25D366', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => setSendModal('whatsapp')}>
-              <MessageSquare size={13} /> WhatsApp
-            </button>
-          )}
-          {contact.email && (
-            <button className="btn btn-sm" style={{ background: '#3B82F6', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => setSendModal('email')}>
-              <Mail size={13} /> Email
-            </button>
-          )}
-          {contact.phone && (
-            <button className="btn btn-sm" style={{ background: '#F59E0B', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => setSendModal('sms')}>
-              <Smartphone size={13} /> SMS
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Timeline */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-        <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
-          Activity Timeline ({timeline.length})
-        </div>
-
-        {timeline.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">📭</div>
-            <h3>No activity yet</h3>
-            <p>Start by calling or sending a message</p>
-          </div>
-        ) : (
-          <div className="timeline">
-            {timeline.map(item => <TimelineItem key={item.id} item={item} />)}
-          </div>
-        )}
-      </div>
-
-      {sendModal && (
-        <SendModal
-          contact={contact}
-          channel={sendModal}
-          onClose={() => setSendModal(null)}
-          onSent={() => api.get(`/contacts/${contactId}`).then(({ data }) => setData(data))}
-        />
-      )}
-    </div>
-  );
-}
-
-// ========== Main Contacts Page ==========
+// ========== MAIN CUSTOMERS & CONTACTS PAGE ==========
 export default function ContactsPage() {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedId, setSelectedId] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const { can } = useAuth();
 
-  // Mock data fallback
   const MOCK_CONTACTS = [
-    { id: '1', full_name: 'Arjun Sharma', email: 'arjun@techcorp.in', phone: '+919876543210', whatsapp_number: '+919876543210', company: 'TechCorp India', status: 'customer', source: 'whatsapp', call_count: 8, whatsapp_count: 23 },
-    { id: '2', full_name: 'Priya Patel', email: 'priya@startup.io', phone: '+919123456789', whatsapp_number: '+919123456789', company: 'Startup IO', status: 'prospect', source: 'call', call_count: 3, whatsapp_count: 7 },
-    { id: '3', full_name: 'Rahul Gupta', email: 'rahul@enterprise.com', phone: '+918765432109', company: 'Enterprise Ltd', status: 'lead', source: 'email', call_count: 1, whatsapp_count: 0 },
-    { id: '4', full_name: 'Sneha Iyer', email: 'sneha@business.in', phone: '+917654321098', whatsapp_number: '+917654321098', company: 'Business Inc', status: 'customer', source: 'manual', call_count: 12, whatsapp_count: 45 },
+    { id: '1', full_name: 'Rahul Kumar', email: 'rahul@enterprise.com', phone: '+919876543210', whatsapp_number: '+919876543210', company: 'Acme Pvt Ltd', job_title: 'VP Operations', status: 'customer', source: 'whatsapp', total_deal_value: 250000, call_count: 5, whatsapp_count: 18, email_count: 4 },
+    { id: '2', full_name: 'Priya Sharma', email: 'priya@startup.io', phone: '+919123456789', whatsapp_number: '+919123456789', company: 'InnoTech Labs', job_title: 'Founder & CEO', status: 'prospect', source: 'email', total_deal_value: 120000, call_count: 3, whatsapp_count: 7, email_count: 8 },
+    { id: '3', full_name: 'Amit Singh', email: 'amit@logistics.in', phone: '+918765432109', whatsapp_number: '+918765432109', company: 'Freight Express', job_title: 'IT Director', status: 'lead', source: 'call', total_deal_value: 80000, call_count: 2, whatsapp_count: 1, email_count: 2 },
+    { id: '4', full_name: 'Sonal Verma', email: 'sonal@fintech.co', phone: '+917654321098', whatsapp_number: '+917654321098', company: 'PayFast Digital', job_title: 'Head of Sales', status: 'customer', source: 'web', total_deal_value: 450000, call_count: 9, whatsapp_count: 34, email_count: 12 },
   ];
 
   const fetchContacts = async () => {
     setLoading(true);
     try {
-      const params = { search, status: statusFilter };
-      const { data } = await api.get('/contacts', { params });
-      setContacts(data.contacts);
+      const { data } = await api.get('/contacts', {
+        params: { search, status: statusFilter },
+      });
+      const list = data.contacts || [];
+      setContacts(list.length > 0 ? list : MOCK_CONTACTS);
+      if (!selectedId && (list.length > 0 || MOCK_CONTACTS.length > 0)) {
+        setSelectedId((list[0] || MOCK_CONTACTS[0]).id);
+      }
     } catch {
       setContacts(MOCK_CONTACTS);
+      if (!selectedId && MOCK_CONTACTS.length > 0) {
+        setSelectedId(MOCK_CONTACTS[0].id);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchContacts(); }, [search, statusFilter]);
-
-  const filtered = contacts.filter(c =>
-    (!search || c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-     c.email?.toLowerCase().includes(search.toLowerCase()) ||
-     c.phone?.includes(search))
-  );
+  useEffect(() => {
+    fetchContacts();
+  }, [search, statusFilter]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: selectedId ? '1fr 380px' : '1fr', gap: '20px', height: '100%' }}>
-      {/* Left: Contact List */}
-      <div>
-        {/* Toolbar */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
-          <input
-            className="form-input"
-            style={{ maxWidth: '280px' }}
-            placeholder="🔍 Search contacts..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <select className="form-select" style={{ maxWidth: '140px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="">All Status</option>
-            {['lead', 'prospect', 'customer', 'churned'].map(s => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '380px 1fr',
+      gap: '16px',
+      height: 'calc(100vh - 100px)',
+      overflow: 'hidden',
+    }}>
+      {/* LEFT: CUSTOMER DIRECTORY & SEARCH */}
+      <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Search & Actions Header */}
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', fontSize: '15px' }}>
+              <Users size={18} style={{ color: 'var(--blue)' }} />
+              <span>Customers (360°)</span>
+            </div>
+            {can('agent') && (
+              <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
+                <Plus size={14} /> New
+              </button>
+            )}
+          </div>
+
+          {/* Omnichannel Search Input */}
+          <div style={{ position: 'relative', marginBottom: '8px' }}>
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '11px', color: 'var(--text-muted)' }} />
+            <input
+              className="form-input"
+              style={{ paddingLeft: '30px', fontSize: '13px' }}
+              placeholder="Search by name, phone, email, tags..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Lifecycle Filter */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {['', 'lead', 'prospect', 'customer'].map(s => (
+              <button
+                key={s}
+                className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '11px', padding: '4px 8px' }}
+                onClick={() => setStatusFilter(s)}
+              >
+                {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
+              </button>
             ))}
-          </select>
-          <div style={{ flex: 1 }} />
-          {can('agent') && (
-            <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-              ➕ New Contact
-            </button>
-          )}
+          </div>
         </div>
 
-        {/* Table */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Contact</th>
-                  <th>Status</th>
-                  <th>Company</th>
-                  <th>Channels</th>
-                  <th>Activity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}><div className="spinner" /></td></tr>
-                ) : filtered.map(c => (
-                  <tr key={c.id} onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
-                    style={{ background: selectedId === c.id ? 'var(--bg-hover)' : '' }}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{
-                          width: '34px', height: '34px', borderRadius: '50%',
-                          background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '13px', fontWeight: '700', color: 'white', flexShrink: 0,
-                        }}>{c.full_name?.charAt(0)}</div>
-                        <div>
-                          <div style={{ fontWeight: '600', fontSize: '13.5px' }}>{c.full_name}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td><span className={`status-badge status-${c.status}`}>{c.status}</span></td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{c.company || '—'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {c.phone && <span title="Phone">📞</span>}
-                        {c.whatsapp_number && <span title="WhatsApp">💬</span>}
-                        {c.email && <span title="Email">📧</span>}
-                      </div>
-                    </td>
-                    <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                      {c.call_count || 0} calls • {c.whatsapp_count || 0} msgs
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {/* Customer Directory List */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center' }}><div className="spinner" /></div>
+          ) : contacts.length === 0 ? (
+            <div className="empty-state" style={{ padding: '40px 20px' }}>
+              <div className="empty-icon">🔍</div>
+              <h3>No matching customers</h3>
+              <p>Try searching with another term.</p>
+            </div>
+          ) : (
+            contacts.map(c => {
+              const isSelected = selectedId === c.id;
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => setSelectedId(c.id)}
+                  style={{
+                    padding: '14px 16px',
+                    borderBottom: '1px solid var(--border)',
+                    cursor: 'pointer',
+                    background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                    borderLeft: isSelected ? '3px solid var(--blue)' : '3px solid transparent',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <div style={{ fontWeight: '700', fontSize: '14px', color: isSelected ? 'var(--blue)' : 'var(--text-primary)' }}>
+                      {c.full_name}
+                    </div>
+                    <span className={`status-badge status-${c.status}`} style={{ fontSize: '10px' }}>
+                      {c.status}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                    <Building size={12} />
+                    <span>{c.company || 'Private Customer'}</span>
+                    {c.job_title && <span>• {c.job_title}</span>}
+                  </div>
+
+                  {/* Channel Quick Indicators */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {c.whatsapp_number && <span style={{ color: '#25D366' }} title="WhatsApp Ready">💬</span>}
+                      {c.phone && <span style={{ color: '#10B981' }} title="Phone Ready">📞</span>}
+                      {c.email && <span style={{ color: '#3B82F6' }} title="Email Ready">✉️</span>}
+                    </div>
+                    <div>
+                      {c.total_deal_value > 0 ? (
+                        <span style={{ color: '#10B981', fontWeight: '600' }}>₹{c.total_deal_value}</span>
+                      ) : (
+                        <span>{(c.call_count || 0) + (c.whatsapp_count || 0)} touchpoints</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
-      {/* Right: Contact Detail */}
-      {selectedId && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'sticky', top: 0, maxHeight: 'calc(100vh - 108px)' }}>
-          <ContactDetail contactId={selectedId} onClose={() => setSelectedId(null)} />
-        </div>
-      )}
+      {/* RIGHT: COMPLETE 360° CUSTOMER PROFILE */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {selectedId ? (
+          <Contact360Profile
+            contactId={selectedId}
+            onUpdateContact={fetchContacts}
+          />
+        ) : (
+          <div className="empty-state" style={{ margin: 'auto' }}>
+            <div className="empty-icon">👤</div>
+            <h3>Select a Customer</h3>
+            <p>Choose any contact on the left to inspect their 360° profile.</p>
+          </div>
+        )}
+      </div>
 
-      {/* Modal */}
-      {showForm && (
+      {/* CREATE CUSTOMER MODAL */}
+      {showCreateModal && (
         <ContactFormModal
-          onClose={() => setShowForm(false)}
+          onClose={() => setShowCreateModal(false)}
           onSaved={fetchContacts}
         />
       )}

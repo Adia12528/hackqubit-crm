@@ -1,7 +1,7 @@
 const express = require('express');
-const axios = require('axios');
 const pool = require('../db/pool');
 const { authenticate, authorize } = require('../middleware/auth');
+const whatsappService = require('../services/communication/whatsapp.service');
 
 const router = express.Router();
 
@@ -22,10 +22,11 @@ router.get('/webhook', (req, res) => {
   }
 });
 
-// POST /api/whatsapp/webhook - receive inbound messages
+// POST /api/whatsapp/webhook - receive inbound messages with identity resolution
 router.post('/webhook', async (req, res) => {
   try {
     const body = req.body;
+    const io = req.app.get('io');
 
     if (body.object === 'whatsapp_business_account') {
       for (const entry of body.entry || []) {
@@ -34,23 +35,6 @@ router.post('/webhook', async (req, res) => {
           
           for (const msg of value.messages || []) {
             const phone = msg.from;
-            
-            // Find or create contact by phone
-            let { rows: contacts } = await pool.query(
-              'SELECT id FROM contacts WHERE whatsapp_number = $1 OR phone = $1 LIMIT 1',
-              [phone]
-            );
-            
-            let contactId = contacts[0]?.id;
-            if (!contactId) {
-              const contact = value.contacts?.[0];
-              const { rows: newContact } = await pool.query(
-                `INSERT INTO contacts (full_name, phone, whatsapp_number, source, status)
-                 VALUES ($1, $2, $2, 'whatsapp', 'lead') RETURNING id`,
-                [contact?.profile?.name || phone, phone]
-              );
-              contactId = newContact[0].id;
-            }
 
             // Extract message content
             let content = '';
@@ -62,15 +46,17 @@ router.post('/webhook', async (req, res) => {
             else if (msg.type === 'audio') mediaUrl = msg.audio?.id;
             else if (msg.type === 'document') { mediaUrl = msg.document?.id; content = msg.document?.filename || ''; }
 
-            // Save to DB
-            await pool.query(
-              `INSERT INTO whatsapp_messages (contact_id, wa_message_id, direction, message_type, 
-                content, media_url, phone_number, status)
-               VALUES ($1,$2,'inbound',$3,$4,$5,$6,'received')`,
-              [contactId, msg.id, messageType, content, mediaUrl, phone]
-            );
+            // Delegate to service with identity resolution & timeline creation
+            await whatsappService.processInbound({
+              from: phone,
+              msgId: msg.id,
+              messageType,
+              content,
+              mediaUrl,
+              io,
+            });
 
-            console.log(`📱 WhatsApp message from ${phone}: ${content}`);
+            console.log(`📱 Processed inbound WhatsApp from ${phone}`);
           }
         }
       }
@@ -111,58 +97,22 @@ router.get('/messages', async (req, res) => {
 router.post('/send', authorize('agent'), async (req, res) => {
   try {
     const { contact_id, phone_number, message, message_type = 'text', template_name, template_params } = req.body;
+    const io = req.app.get('io');
 
-    // Build WhatsApp API payload
-    let payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: phone_number,
-    };
+    const result = await whatsappService.sendMessage({
+      contact_id,
+      agent_id: req.user.id,
+      phone_number,
+      message,
+      message_type,
+      template_name,
+      template_params,
+      io,
+    });
 
-    if (message_type === 'template') {
-      payload.type = 'template';
-      payload.template = {
-        name: template_name,
-        language: { code: 'en_US' },
-        components: template_params || [],
-      };
-    } else {
-      payload.type = 'text';
-      payload.text = { body: message, preview_url: false };
-    }
-
-    // Send via Meta API
-    let waMessageId = null;
-    let status = 'sent';
-    
-    try {
-      const response = await axios.post(
-        `${process.env.WHATSAPP_API_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-        payload,
-        {
-          headers: {
-            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          }
-        }
-      );
-      waMessageId = response.data.messages?.[0]?.id;
-    } catch (apiErr) {
-      console.error('WhatsApp API error:', apiErr.response?.data);
-      status = 'failed';
-    }
-
-    // Log to DB regardless
-    const { rows } = await pool.query(
-      `INSERT INTO whatsapp_messages (contact_id, agent_id, wa_message_id, direction, 
-        message_type, content, template_name, phone_number, status)
-       VALUES ($1,$2,$3,'outbound',$4,$5,$6,$7,$8) RETURNING *`,
-      [contact_id, req.user.id, waMessageId, message_type, message, template_name, phone_number, status]
-    );
-
-    res.json({ message: rows[0], status });
+    res.json(result);
   } catch (err) {
-    console.error(err);
+    console.error('WhatsApp send error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
