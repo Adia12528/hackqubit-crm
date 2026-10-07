@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Layers, Mail, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Layers, Mail, Lock, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const { login, user } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@hackqubit.com');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -39,26 +39,28 @@ export default function LoginPage() {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '24px',
+      backgroundImage: 'radial-gradient(circle at 12% 18%, rgba(91,157,255,.2), transparent 26rem), radial-gradient(circle at 88% 82%, rgba(52,211,153,.11), transparent 24rem)',
     }}>
       <div style={{ width: '100%', maxWidth: '400px' }}>
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <div style={{
-            width: '44px', height: '44px',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: '12px',
+            width: '52px', height: '52px',
+            background: 'var(--gradient-blue)',
+            border: '1px solid rgba(145,195,255,.5)',
+            borderRadius: '16px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 14px',
-            color: 'var(--blue)',
+            color: 'white',
+            boxShadow: '0 12px 28px rgba(55,125,231,.32)',
           }}>
             <Layers size={22} strokeWidth={2.2} />
           </div>
-          <h1 style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+          <h1 style={{ fontSize: '25px', fontWeight: '800', letterSpacing: '-0.04em', marginBottom: '6px' }}>
             HackQubit CRM
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-            Enterprise Customer Relationship Portal
+            One workspace for every customer conversation
           </p>
         </div>
 
@@ -67,8 +69,8 @@ export default function LoginPage() {
           background: 'var(--bg-card)',
           border: '1px solid var(--border)',
           borderRadius: '14px',
-          padding: '28px',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
+          padding: '30px',
+          boxShadow: '0 24px 70px rgba(0,0,0,.38), 0 0 0 1px rgba(117,157,220,.04)',
         }}>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
@@ -81,7 +83,7 @@ export default function LoginPage() {
                 className="form-input"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="admin@hackqubit.com"
+                placeholder="you@example.com"
                 required
               />
             </div>
@@ -112,21 +114,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Access Info */}
-          <div style={{
-            marginTop: '20px', padding: '12px 14px',
-            background: 'var(--bg-secondary)',
-            borderRadius: '8px', border: '1px solid var(--border)',
-            display: 'flex', flexDirection: 'column', gap: '4px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              <ShieldCheck size={12} color="#10B981" />
-              <span>Default Administrator Access</span>
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              admin@hackqubit.com • Admin@123
-            </div>
-          </div>
         </div>
 
         {/* Footer info */}

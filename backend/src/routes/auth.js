@@ -54,6 +54,28 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// GET /api/auth/users - list active users for administrators
+router.get('/users', authenticate, async (req, res) => {
+  try {
+    if (req.user.role_level > 2) {
+      return res.status(403).json({ error: 'Only admins can view users' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT u.id, u.email, u.full_name, u.phone, u.is_active,
+              u.created_at, r.name AS role, r.level
+       FROM users u
+       JOIN roles r ON u.role_id = r.id
+       ORDER BY r.level ASC, u.full_name ASC`
+    );
+
+    res.json({ users: rows });
+  } catch (err) {
+    console.error('User list error:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/auth/register (Admin only via app)
 router.post('/register', authenticate, async (req, res) => {
   try {
@@ -62,6 +84,9 @@ router.post('/register', authenticate, async (req, res) => {
     }
 
     const { email, password, full_name, role_id, phone } = req.body;
+    if (!email || !password || !full_name) {
+      return res.status(400).json({ error: 'Email, password, and full name are required' });
+    }
     
     // Prevent privilege escalation: can't create user with higher role than yourself
     if (role_id && role_id < req.user.role_id) {

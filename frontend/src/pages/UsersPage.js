@@ -1,20 +1,31 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { ShieldCheck, UserPlus } from 'lucide-react';
 
 export default function UsersPage() {
   const { user } = useAuth();
-  const [usersList, setUsersList] = useState([
-    { id: '1', full_name: 'Super Admin', email: 'admin@hackqubit.com', role: 'super_admin', level: 1, is_active: true, phone: '+919876500001' },
-    { id: '2', full_name: 'Rajesh Verma', email: 'rajesh@hackqubit.com', role: 'admin', level: 2, is_active: true, phone: '+919876500002' },
-    { id: '3', full_name: 'Neha Kapoor', email: 'neha@hackqubit.com', role: 'manager', level: 3, is_active: true, phone: '+919876500003' },
-    { id: '4', full_name: 'Amit Patel', email: 'amit@hackqubit.com', role: 'agent', level: 4, is_active: true, phone: '+919876500004' },
-    { id: '5', full_name: 'Simran Kaur', email: 'simran@hackqubit.com', role: 'viewer', level: 5, is_active: true, phone: '+919876500005' },
-  ]);
+  const [usersList, setUsersList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newUser, setNewUser] = useState({ full_name: '', email: '', role: 'agent', level: 4, phone: '' });
+  const [newUser, setNewUser] = useState({ full_name: '', email: '', password: '', role: 'agent', phone: '' });
+
+  const loadUsers = async () => {
+    try {
+      const { data } = await api.get('/auth/users');
+      setUsersList(data.users);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Unable to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
   const roleTiers = [
     { level: 1, role: 'super_admin', label: 'Tier 1: Super Admin', desc: 'Unrestricted system access, Docker host controls & DB operations' },
@@ -24,21 +35,29 @@ export default function UsersPage() {
     { level: 5, role: 'viewer', label: 'Tier 5: Viewer', desc: 'Read-only metrics, audits & timelines (No dispatch/delete)' },
   ];
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
-    if (!newUser.full_name || !newUser.email) return;
+    if (!newUser.full_name || !newUser.email || !newUser.password) {
+      toast.error('Name, email, and password are required');
+      return;
+    }
 
     const levelMap = { super_admin: 1, admin: 2, manager: 3, agent: 4, viewer: 5 };
-    const created = {
-      id: Date.now().toString(),
-      ...newUser,
-      level: levelMap[newUser.role] || 4,
-      is_active: true
-    };
-    setUsersList(prev => [...prev, created]);
-    toast.success(`User ${newUser.full_name} created under ${newUser.role}`);
-    setShowAddModal(false);
-    setNewUser({ full_name: '', email: '', role: 'agent', level: 4, phone: '' });
+    try {
+      await api.post('/auth/register', {
+        full_name: newUser.full_name,
+        email: newUser.email,
+        password: newUser.password,
+        phone: newUser.phone,
+        role_id: levelMap[newUser.role] || 4,
+      });
+      toast.success(`User ${newUser.full_name} created under ${newUser.role}`);
+      setShowAddModal(false);
+      setNewUser({ full_name: '', email: '', password: '', role: 'agent', phone: '' });
+      await loadUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Unable to create user');
+    }
   };
 
   return (
@@ -117,7 +136,9 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {usersList.map(u => (
+              {loading ? (
+                <tr><td colSpan="6">Loading users...</td></tr>
+              ) : usersList.map(u => (
                 <tr key={u.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -173,6 +194,10 @@ export default function UsersPage() {
               <div className="form-group">
                 <label className="form-label">Email Address</label>
                 <input className="form-input" type="email" required value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} placeholder="john@enterprise.com" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Temporary Password</label>
+                <input className="form-input" type="password" required minLength="8" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} placeholder="At least 8 characters" />
               </div>
               <div className="form-group">
                 <label className="form-label">Phone Number</label>
