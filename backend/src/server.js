@@ -99,11 +99,19 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
   try {
     // Test DB
-    await pool.query('SELECT 1');
-    console.log('✅ Database connection OK');
+    try {
+      await pool.query('SELECT 1');
+      console.log('✅ Database connection OK');
+    } catch (dbErr) {
+      console.warn('⚠️ PostgreSQL is not reachable at localhost:5432 (' + dbErr.message + '). Database features will be offline until PostgreSQL starts.');
+    }
 
-    // Init MinIO buckets
-    await initBuckets();
+    // Init MinIO buckets (optional on local dev)
+    try {
+      await initBuckets();
+    } catch (minioErr) {
+      console.warn('⚠️ MinIO not reachable. Call recordings & attachments will be disabled until MinIO starts:', minioErr.message);
+    }
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`

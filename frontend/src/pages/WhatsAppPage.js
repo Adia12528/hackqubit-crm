@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { Send, MessageSquare } from 'lucide-react';
 
 export default function WhatsAppPage() {
   const [contacts, setContacts] = useState([]);
@@ -195,19 +196,20 @@ export default function WhatsAppPage() {
               <input
                 className="form-input"
                 style={{ flex: 1 }}
-                placeholder="Type a WhatsApp message or template tag..."
+                placeholder="Type a WhatsApp message..."
                 value={inputText}
                 onChange={e => setInputText(e.target.value)}
               />
-              <button type="submit" className="btn btn-success" disabled={sending || !inputText.trim()}>
-                {sending ? 'Sending...' : 'Send 🚀'}
+              <button type="submit" className="btn btn-success" disabled={sending || !inputText.trim()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Send size={14} />
+                <span>{sending ? 'Sending...' : 'Send'}</span>
               </button>
             </form>
           </>
         ) : (
           <div className="empty-state">
-            <div className="empty-icon">💬</div>
-            <h3>Select a contact to view chat history</h3>
+            <div className="empty-icon"><MessageSquare size={32} style={{ color: 'var(--text-muted)' }} /></div>
+            <h3>Select a contact to view conversation</h3>
           </div>
         )}
       </div>

@@ -4,54 +4,54 @@
    ==================================== */
 
 :root {
-  /* Color Palette */
-  --bg-primary: #0F1629;
-  --bg-secondary: #151D35;
-  --bg-card: #1C2545;
-  --bg-hover: #243060;
-  --border: rgba(255,255,255,0.08);
-  --border-focus: rgba(99,102,241,0.5);
+  /* Color Palette - Clean Professional Slate (Linear/Stripe Style) */
+  --bg-primary: #090a0f;
+  --bg-secondary: #11131a;
+  --bg-card: #171922;
+  --bg-hover: #1f2230;
+  --border: #232636;
+  --border-focus: #3b82f6;
 
   /* Brand Colors */
-  --blue: #3B82F6;
-  --blue-dark: #2563EB;
-  --purple: #8B5CF6;
-  --green: #10B981;
-  --yellow: #F59E0B;
-  --red: #EF4444;
-  --teal: #06B6D4;
-  --orange: #F97316;
+  --blue: #3b82f6;
+  --blue-dark: #2563eb;
+  --purple: #6366f1;
+  --green: #10b981;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --teal: #14b8a6;
+  --orange: #f97316;
 
   /* Text */
-  --text-primary: #F1F5F9;
-  --text-secondary: #94A3B8;
-  --text-muted: #64748B;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
 
   /* Gradients */
-  --gradient-blue: linear-gradient(135deg, #3B82F6, #8B5CF6);
-  --gradient-green: linear-gradient(135deg, #10B981, #06B6D4);
-  --gradient-card: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(139,92,246,0.05));
+  --gradient-blue: linear-gradient(135deg, #2563eb, #3b82f6);
+  --gradient-green: linear-gradient(135deg, #059669, #10b981);
+  --gradient-card: none;
 
   /* Channel Colors */
-  --channel-call: #10B981;
-  --channel-whatsapp: #25D366;
-  --channel-email: #3B82F6;
-  --channel-sms: #F59E0B;
+  --channel-call: #10b981;
+  --channel-whatsapp: #22c55e;
+  --channel-email: #3b82f6;
+  --channel-sms: #f59e0b;
 
   /* Shadows */
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
-  --shadow-glow: 0 0 20px rgba(59,130,246,0.2);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.15);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-glow: none;
 
   /* Transitions */
-  --transition: 0.2s ease;
-  --transition-slow: 0.3s ease;
+  --transition: 0.15s ease;
+  --transition-slow: 0.25s ease;
 
   /* Border Radius */
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 }
 
@@ -230,18 +230,25 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: var(--radius-full);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
-.role-badge.super_admin { background: rgba(239,68,68,0.15); color: var(--red); }
-.role-badge.admin { background: rgba(139,92,246,0.15); color: var(--purple); }
-.role-badge.manager { background: rgba(59,130,246,0.15); color: var(--blue); }
-.role-badge.agent { background: rgba(16,185,129,0.15); color: var(--green); }
-.role-badge.viewer { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+.role-badge.super_admin,
+.role-badge.admin,
+.role-badge.manager,
+.role-badge.agent,
+.role-badge.viewer { 
+  background: var(--bg-hover); 
+  color: var(--text-primary); 
+  border: 1px solid var(--border);
+}
 
 /* ====================================
    MAIN CONTENT

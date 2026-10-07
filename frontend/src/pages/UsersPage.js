@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { ShieldCheck, UserPlus } from 'lucide-react';
 
 export default function UsersPage() {
   const { user } = useAuth();
@@ -44,24 +45,25 @@ export default function UsersPage() {
     <div>
       {/* 5-Tier RBAC Architecture Showcase Banner */}
       <div style={{
-        background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.1))',
-        border: '1px solid rgba(139,92,246,0.3)',
-        borderRadius: '16px',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: '12px',
         padding: '24px',
         marginBottom: '24px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '24px' }}>🛡️</span>
-              <h2 style={{ fontSize: '20px', fontWeight: '800' }}>Granular 5-Tier RBAC Policy Engine</h2>
+              <ShieldCheck size={22} style={{ color: 'var(--blue)' }} />
+              <h2 style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '-0.01em' }}>Granular 5-Tier RBAC Policy Engine</h2>
             </div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '6px', maxWidth: '750px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '6px', maxWidth: '750px' }}>
               Enforced at database layer and API middleware via JWT role hierarchies. Lower numeric level grants strictly superior privilege.
             </p>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            ➕ Provision User
+          <button className="btn btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <UserPlus size={15} />
+            <span>Provision User</span>
           </button>
         </div>
 

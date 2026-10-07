@@ -1,11 +1,9 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { useAuth } from '../context/AuthContext';
+import { Search, Bell, HardDrive } from 'lucide-react';
 
 export default function Layout() {
-  const { user } = useAuth();
-
   return (
     <div className="app-layout">
       <Sidebar />
@@ -17,21 +15,26 @@ export default function Layout() {
           </div>
 
           <div className="search-bar">
-            <span>🔍</span>
-            <input placeholder="Search across timeline, calls, customers..." />
+            <Search size={15} style={{ color: 'var(--text-muted)' }} />
+            <input placeholder="Search timeline, contacts, communications..." />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', padding: '4px 10px', borderRadius: '999px', fontSize: '11px', color: '#10B981', fontWeight: 'bold' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }}></span>
-              MinIO Storage: Connected
-            </div>
-            <div style={{
-              width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-card)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)', fontSize: '13px'
+            <div style={{ 
+              display: 'flex', alignItems: 'center', gap: '6px', 
+              background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', 
+              padding: '4px 10px', borderRadius: '6px', fontSize: '11px', color: '#10B981', fontWeight: '500' 
             }}>
-              🔔
+              <HardDrive size={13} />
+              <span>S3 Storage Active</span>
             </div>
+            <button style={{
+              width: '34px', height: '34px', borderRadius: '8px', background: 'var(--bg-secondary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)', 
+              color: 'var(--text-secondary)', cursor: 'pointer'
+            }} title="Notifications">
+              <Bell size={15} />
+            </button>
           </div>
         </header>
 

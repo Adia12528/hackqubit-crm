@@ -1,6 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import api from '../api';
+import { 
+  Phone, 
+  PhoneIncoming, 
+  PhoneOutgoing, 
+  PhoneMissed, 
+  PhoneOff, 
+  Mic, 
+  MicOff, 
+  Play, 
+  Plus, 
+  Clock 
+} from 'lucide-react';
 
 // ========== WebRTC Call Widget ==========
 function CallWidget({ contact, onEnd }) {
@@ -39,8 +51,8 @@ function CallWidget({ contact, onEnd }) {
         notes,
         call_status: 'completed',
       });
-      toast.success('Call logged successfully');
-    } catch { toast.error('Failed to log call'); }
+      toast.success('Call session saved');
+    } catch { toast.error('Failed to save call'); }
     
     setTimeout(() => onEnd(), 1000);
   };
@@ -48,8 +60,8 @@ function CallWidget({ contact, onEnd }) {
   return (
     <div className={`call-widget ${status}`}>
       <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {status === 'connecting' ? '🔄 Connecting...' : status === 'active' ? '🟢 In Call' : '✅ Call Ended'}
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {status === 'connecting' ? 'Establishing Line...' : status === 'active' ? 'Voice Channel Connected' : 'Call Terminated'}
         </div>
         <div style={{ fontSize: '15px', fontWeight: '700', marginTop: '4px' }}>{contact.full_name}</div>
         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{contact.phone}</div>
@@ -62,7 +74,7 @@ function CallWidget({ contact, onEnd }) {
       {status === 'active' && (
         <textarea
           className="form-textarea"
-          placeholder="Call notes..."
+          placeholder="Session notes..."
           value={notes}
           onChange={e => setNotes(e.target.value)}
           style={{ marginBottom: '12px', fontSize: '12px', minHeight: '60px' }}
@@ -71,10 +83,12 @@ function CallWidget({ contact, onEnd }) {
 
       <div className="call-actions">
         <button className={`call-btn mute`} onClick={() => setMuted(!muted)} title={muted ? 'Unmute' : 'Mute'}>
-          {muted ? '🔇' : '🎤'}
+          {muted ? <MicOff size={16} /> : <Mic size={16} />}
         </button>
         {status === 'active' && (
-          <button className="call-btn end" onClick={handleEnd} title="End call">📵</button>
+          <button className="call-btn end" onClick={handleEnd} title="End call">
+            <PhoneOff size={16} />
+          </button>
         )}
       </div>
     </div>
@@ -127,23 +141,26 @@ export default function CallsPage() {
       {/* Stats Bar */}
       <div className="kpi-grid" style={{ marginBottom: '20px' }}>
         {[
-          { icon: '📞', label: 'Total Calls', value: calls.length, color: '#10B981' },
-          { icon: '⬆️', label: 'Outbound', value: calls.filter(c => c.direction === 'outbound').length, color: '#3B82F6' },
-          { icon: '⬇️', label: 'Inbound', value: calls.filter(c => c.direction === 'inbound').length, color: '#8B5CF6' },
-          { icon: '⚠️', label: 'Missed', value: calls.filter(c => c.call_status === 'missed').length, color: '#EF4444' },
-        ].map(item => (
-          <div key={item.label} className="kpi-card" style={{ '--kpi-color': item.color }}>
-            <div className="kpi-icon">{item.icon}</div>
-            <div className="kpi-value">{item.value}</div>
-            <div className="kpi-label">{item.label}</div>
+          { icon: Phone, label: 'Total Calls', value: calls.length, color: '#10B981' },
+          { icon: PhoneOutgoing, label: 'Outbound', value: calls.filter(c => c.direction === 'outbound').length, color: '#3B82F6' },
+          { icon: PhoneIncoming, label: 'Inbound', value: calls.filter(c => c.direction === 'inbound').length, color: '#8B5CF6' },
+          { icon: PhoneMissed, label: 'Missed', value: calls.filter(c => c.call_status === 'missed').length, color: '#EF4444' },
+        ].map(({ icon: Icon, label, value, color }) => (
+          <div key={label} className="kpi-card" style={{ '--kpi-color': color }}>
+            <div className="kpi-icon">
+              <Icon size={18} strokeWidth={2} />
+            </div>
+            <div className="kpi-value">{value}</div>
+            <div className="kpi-label">{label}</div>
           </div>
         ))}
       </div>
 
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-        <button className="btn btn-success" onClick={() => setShowNewCall(true)}>
-          📞 New Call
+        <button className="btn btn-success" onClick={() => setShowNewCall(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Plus size={15} />
+          <span>Initiate Call</span>
         </button>
         <div style={{ flex: 1 }} />
       </div>
@@ -151,7 +168,7 @@ export default function CallsPage() {
       {/* Call History */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-          <div className="card-title">Call History</div>
+          <div className="card-title">Call Logs & Audio Archive</div>
         </div>
         <div className="table-container">
           <table>
@@ -162,7 +179,7 @@ export default function CallsPage() {
                 <th>Status</th>
                 <th>Duration</th>
                 <th>Phone</th>
-                <th>Date</th>
+                <th>Date & Time</th>
                 <th>Notes</th>
                 <th>Recording</th>
               </tr>
@@ -174,8 +191,18 @@ export default function CallsPage() {
                 <tr key={call.id}>
                   <td style={{ fontWeight: '600' }}>{call.contact_name || '—'}</td>
                   <td>
-                    <span style={{ fontSize: '13px' }}>
-                      {call.direction === 'outbound' ? '⬆️ Outbound' : '⬇️ Inbound'}
+                    <span style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      {call.direction === 'outbound' ? (
+                        <>
+                          <PhoneOutgoing size={13} style={{ color: '#3B82F6' }} />
+                          <span>Outbound</span>
+                        </>
+                      ) : (
+                        <>
+                          <PhoneIncoming size={13} style={{ color: '#8B5CF6' }} />
+                          <span>Inbound</span>
+                        </>
+                      )}
                     </span>
                   </td>
                   <td><span className={`status-badge status-${call.call_status}`}>{call.call_status}</span></td>
@@ -189,8 +216,9 @@ export default function CallsPage() {
                   </td>
                   <td>
                     {call.recording_url ? (
-                      <button className="btn btn-ghost btn-sm" onClick={() => getRecordingUrl(call.id)}>
-                        ▶️ Play
+                      <button className="btn btn-ghost btn-sm" onClick={() => getRecordingUrl(call.id)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Play size={12} />
+                        <span>Play</span>
                       </button>
                     ) : <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>}
                   </td>

@@ -84,6 +84,8 @@ services:
       dockerfile: Dockerfile
     container_name: hackqubit_backend
     restart: always
+    env_file:
+      - ./backend/.env
     environment:
       PORT: 5000
       NODE_ENV: production

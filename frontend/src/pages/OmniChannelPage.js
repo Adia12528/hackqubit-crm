@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../api';
+import { Mail, Smartphone, Send, PhoneCall, MessageSquare, CheckCircle2 } from 'lucide-react';
 
 export default function OmniChannelPage() {
   const [activeTab, setActiveTab] = useState('email');
@@ -45,8 +46,8 @@ export default function OmniChannelPage() {
     <div>
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '20px', fontWeight: '800' }}>Omnichannel Dispatch Gateway</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.01em' }}>Omnichannel Dispatch Gateway</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
           Direct asynchronous gateway for Email (SMTP/IMAP) & SMS (Twilio/Kannel) linked to customer histories.
         </p>
       </div>
@@ -56,14 +57,18 @@ export default function OmniChannelPage() {
         <button
           className={`btn ${activeTab === 'email' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setActiveTab('email')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          📧 Email Dispatcher (SMTP)
+          <Mail size={15} />
+          <span>Email Dispatcher (SMTP)</span>
         </button>
         <button
           className={`btn ${activeTab === 'sms' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setActiveTab('sms')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          📱 SMS Gateway (Twilio)
+          <Smartphone size={15} />
+          <span>SMS Gateway (Twilio)</span>
         </button>
       </div>
 
@@ -110,8 +115,9 @@ export default function OmniChannelPage() {
                   onChange={e => setEmailForm({ ...emailForm, body: e.target.value })}
                 />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={sending}>
-                {sending ? 'Sending...' : 'Send Outbound Email 🚀'}
+              <button type="submit" className="btn btn-primary" disabled={sending} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Send size={14} />
+                <span>{sending ? 'Sending...' : 'Send Outbound Email'}</span>
               </button>
             </form>
           ) : (
@@ -138,8 +144,9 @@ export default function OmniChannelPage() {
                   {smsForm.content.length} characters • {Math.ceil(smsForm.content.length / 160)} segment(s)
                 </div>
               </div>
-              <button type="submit" className="btn btn-primary" disabled={sending}>
-                {sending ? 'Sending...' : 'Dispatch Twilio SMS 🚀'}
+              <button type="submit" className="btn btn-primary" disabled={sending} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Send size={14} />
+                <span>{sending ? 'Sending...' : 'Dispatch Twilio SMS'}</span>
               </button>
             </form>
           )}
@@ -153,40 +160,52 @@ export default function OmniChannelPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontWeight: '600', fontSize: '13px' }}>📞 Voice (WebRTC & SIP)</span>
-                <span style={{ color: '#10B981', fontSize: '12px', fontWeight: 'bold' }}>STUN/TURN Ready</span>
+            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', fontSize: '13px' }}>
+                  <PhoneCall size={14} style={{ color: '#10B981' }} />
+                  <span>Voice (WebRTC & SIP)</span>
+                </div>
+                <span style={{ color: '#10B981', fontSize: '12px', fontWeight: '500' }}>STUN/TURN Ready</span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Direct browser media streaming + automated MinIO object archiving on hangup.
               </div>
             </div>
 
-            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontWeight: '600', fontSize: '13px' }}>💬 WhatsApp Cloud API</span>
-                <span style={{ color: '#25D366', fontSize: '12px', fontWeight: 'bold' }}>Webhook Active</span>
+            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', fontSize: '13px' }}>
+                  <MessageSquare size={14} style={{ color: '#25D366' }} />
+                  <span>WhatsApp Cloud API</span>
+                </div>
+                <span style={{ color: '#25D366', fontSize: '12px', fontWeight: '500' }}>Webhook Active</span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Inbound endpoint: <code>/api/whatsapp/webhook</code> with SHA-256 verification.
               </div>
             </div>
 
-            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontWeight: '600', fontSize: '13px' }}>📧 SMTP / IMAP Mailer</span>
-                <span style={{ color: '#3B82F6', fontSize: '12px', fontWeight: 'bold' }}>TLS Configured</span>
+            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', fontSize: '13px' }}>
+                  <Mail size={14} style={{ color: '#3B82F6' }} />
+                  <span>SMTP / IMAP Mailer</span>
+                </div>
+                <span style={{ color: '#3B82F6', fontSize: '12px', fontWeight: '500' }}>TLS Configured</span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Full MIME parsing, attachments saved to MinIO bucket <code>attachments</code>.
               </div>
             </div>
 
-            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontWeight: '600', fontSize: '13px' }}>📱 SMS Webhook Bridge</span>
-                <span style={{ color: '#F59E0B', fontSize: '12px', fontWeight: 'bold' }}>2-Way Enabled</span>
+            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', fontSize: '13px' }}>
+                  <Smartphone size={14} style={{ color: '#F59E0B' }} />
+                  <span>SMS Webhook Bridge</span>
+                </div>
+                <span style={{ color: '#F59E0B', fontSize: '12px', fontWeight: '500' }}>2-Way Enabled</span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Twilio TwiML parser captures incoming text replies back onto timeline view.

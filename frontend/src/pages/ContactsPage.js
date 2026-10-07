@@ -3,17 +3,33 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { formatDistanceToNow } from 'date-fns';
+import { 
+  Phone, 
+  MessageSquare, 
+  Mail, 
+  Smartphone, 
+  MapPin, 
+  Play, 
+  Clock, 
+  Inbox, 
+  Plus, 
+  Search, 
+  X, 
+  ArrowDownLeft, 
+  ArrowUpRight 
+} from 'lucide-react';
 
 // ========== Unified Timeline Item ==========
 function TimelineItem({ item }) {
   const CHANNEL_CONFIG = {
-    call: { icon: '📞', label: 'Call', className: 'call' },
-    whatsapp: { icon: '💬', label: 'WhatsApp', className: 'whatsapp' },
-    email: { icon: '📧', label: 'Email', className: 'email' },
-    sms: { icon: '💬', label: 'SMS', className: 'sms' },
+    call: { icon: Phone, label: 'Call', className: 'call' },
+    whatsapp: { icon: MessageSquare, label: 'WhatsApp', className: 'whatsapp' },
+    email: { icon: Mail, label: 'Email', className: 'email' },
+    sms: { icon: Smartphone, label: 'SMS', className: 'sms' },
   };
 
-  const cfg = CHANNEL_CONFIG[item.channel] || { icon: '📌', label: item.channel, className: 'call' };
+  const cfg = CHANNEL_CONFIG[item.channel] || { icon: MessageSquare, label: item.channel, className: 'call' };
+  const Icon = cfg.icon;
   const data = item.data || {};
 
   const renderBody = () => {
@@ -22,17 +38,20 @@ function TimelineItem({ item }) {
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className={`status-badge status-${data.status || 'completed'}`}>{data.status}</span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {data.direction === 'inbound' ? '⬇️ Inbound' : '⬆️ Outbound'}
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {data.direction === 'inbound' ? <ArrowDownLeft size={13} style={{ color: '#8b5cf6' }} /> : <ArrowUpRight size={13} style={{ color: '#3b82f6' }} />}
+              <span>{data.direction === 'inbound' ? 'Inbound' : 'Outbound'}</span>
             </span>
             {data.duration > 0 && (
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                ⏱ {Math.floor(data.duration / 60)}m {data.duration % 60}s
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Clock size={12} />
+                <span>{Math.floor(data.duration / 60)}m {data.duration % 60}s</span>
               </span>
             )}
             {data.recording_url && (
-              <button className="btn btn-ghost btn-sm" onClick={() => {/* play recording */}}>
-                ▶️ Play
+              <button className="btn btn-ghost btn-sm" onClick={() => {/* play recording */}} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Play size={11} />
+                <span>Play</span>
               </button>
             )}
           </div>
@@ -41,7 +60,7 @@ function TimelineItem({ item }) {
       case 'sms':
         return <div className="timeline-body">{data.content?.substring(0, 120)}{data.content?.length > 120 ? '...' : ''}</div>;
       case 'email':
-        return <div className="timeline-body">📧 {data.subject}</div>;
+        return <div className="timeline-body" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={13} /> {data.subject}</div>;
       default:
         return null;
     }
@@ -49,7 +68,9 @@ function TimelineItem({ item }) {
 
   return (
     <div className="timeline-item">
-      <div className={`timeline-dot ${cfg.className}`}>{cfg.icon}</div>
+      <div className={`timeline-dot ${cfg.className}`}>
+        <Icon size={13} />
+      </div>
       <div className="timeline-content">
         <div className="timeline-header">
           <span className={`channel-chip ${cfg.className}`}>{cfg.label}</span>
@@ -94,11 +115,13 @@ function SendModal({ contact, channel, onClose, onSent }) {
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-header">
-          <div className="modal-title">
-            {channel === 'whatsapp' && '💬'} {channel === 'email' && '📧'} {channel === 'sms' && '📱'}
-            {' '}Send via {channel.charAt(0).toUpperCase() + channel.slice(1)}
+          <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {channel === 'whatsapp' && <MessageSquare size={16} style={{ color: '#25D366' }} />} 
+            {channel === 'email' && <Mail size={16} style={{ color: '#3B82F6' }} />} 
+            {channel === 'sms' && <Smartphone size={16} style={{ color: '#F59E0B' }} />}
+            <span>Dispatch {channel.charAt(0).toUpperCase() + channel.slice(1)}</span>
           </div>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={onClose}><X size={14} /></button>
         </div>
 
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
@@ -125,8 +148,9 @@ function SendModal({ contact, channel, onClose, onSent }) {
 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSend} disabled={sending || !content.trim()}>
-            {sending ? '📤 Sending...' : '📤 Send'}
+          <button className="btn btn-primary" onClick={handleSend} disabled={sending || !content.trim()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Send size={14} />
+            <span>{sending ? 'Sending...' : 'Send Message'}</span>
           </button>
         </div>
       </div>
@@ -245,30 +269,30 @@ function ContactDetail({ contactId, onClose }) {
 
         {/* Contact Info */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', marginBottom: '14px' }}>
-          {contact.email && <div style={{ color: 'var(--text-secondary)' }}>📧 {contact.email}</div>}
-          {contact.phone && <div style={{ color: 'var(--text-secondary)' }}>📞 {contact.phone}</div>}
-          {contact.whatsapp_number && <div style={{ color: 'var(--text-secondary)' }}>💬 {contact.whatsapp_number}</div>}
-          {contact.city && <div style={{ color: 'var(--text-secondary)' }}>📍 {contact.city}, {contact.country}</div>}
+          {contact.email && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={13} /> {contact.email}</div>}
+          {contact.phone && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><Phone size={13} /> {contact.phone}</div>}
+          {contact.whatsapp_number && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><MessageSquare size={13} /> {contact.whatsapp_number}</div>}
+          {contact.city && <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={13} /> {contact.city}, {contact.country}</div>}
         </div>
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          <button className="btn btn-sm" style={{ background: '#10B981', color: 'white' }} onClick={() => toast.success('WebRTC call initiating...')}>
-            📞 Call
+          <button className="btn btn-sm" style={{ background: '#10B981', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => toast.success('WebRTC call initiating...')}>
+            <Phone size={13} /> Call
           </button>
           {contact.whatsapp_number && (
-            <button className="btn btn-sm" style={{ background: '#25D366', color: 'white' }} onClick={() => setSendModal('whatsapp')}>
-              💬 WhatsApp
+            <button className="btn btn-sm" style={{ background: '#25D366', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => setSendModal('whatsapp')}>
+              <MessageSquare size={13} /> WhatsApp
             </button>
           )}
           {contact.email && (
-            <button className="btn btn-sm" style={{ background: '#3B82F6', color: 'white' }} onClick={() => setSendModal('email')}>
-              📧 Email
+            <button className="btn btn-sm" style={{ background: '#3B82F6', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => setSendModal('email')}>
+              <Mail size={13} /> Email
             </button>
           )}
           {contact.phone && (
-            <button className="btn btn-sm" style={{ background: '#F59E0B', color: 'white' }} onClick={() => setSendModal('sms')}>
-              📱 SMS
+            <button className="btn btn-sm" style={{ background: '#F59E0B', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => setSendModal('sms')}>
+              <Smartphone size={13} /> SMS
             </button>
           )}
         </div>
