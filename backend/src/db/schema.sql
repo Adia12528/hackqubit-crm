@@ -48,9 +48,14 @@ CREATE TABLE users (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Default Super Admin (password: Admin@123)
-INSERT INTO users (email, password_hash, full_name, role_id) VALUES
-('admin@hackqubit.com', '$2b$10$rqJ8QvKJMKHLYqMxOECxZu3G7ByeQkXMxTjA0YVxHE2PbVL1F4lIm', 'Super Admin', 1);
+-- ================================================
+-- DEFAULT ADMIN NOTE:
+-- No default admin is seeded for security reasons.
+-- After applying this schema, insert your first super admin manually:
+--
+--   node -e "const b=require('bcryptjs'); b.hash('StrongPass!123',12).then(console.log)"
+--   -- then INSERT INTO users (email, password_hash, full_name, role_id) VALUES ('admin@company.com', '<hash>', 'Admin', 1);
+-- ================================================
 
 -- ================================================
 -- CONTACTS TABLE (Customers/Leads)
@@ -238,11 +243,19 @@ CREATE INDEX idx_email_contact ON emails(contact_id);
 CREATE INDEX idx_sms_contact ON sms_messages(contact_id);
 CREATE INDEX idx_timeline_contact_date ON call_recordings(contact_id, started_at DESC);
 
+
 -- ================================================
--- SAMPLE DATA
+-- NOTE: Sample/seed data removed for production.
+-- Create your first admin user by running the following
+-- after the schema is applied (replace values as needed):
+--
+--   INSERT INTO users (email, password_hash, full_name, role_id)
+--   VALUES (
+--     'admin@yourcompany.com',
+--     '$2b$12$<bcrypt_hash_of_your_password>',
+--     'Your Name',
+--     1
+--   );
+--
+-- Generate a bcrypt hash with: node -e "const b=require('bcryptjs'); b.hash('YourPassword',12).then(console.log)"
 -- ================================================
-INSERT INTO contacts (full_name, email, phone, whatsapp_number, company, status, source) VALUES
-('Arjun Sharma', 'arjun@techcorp.in', '+919876543210', '+919876543210', 'TechCorp India', 'customer', 'whatsapp'),
-('Priya Patel', 'priya@startup.io', '+919123456789', '+919123456789', 'Startup IO', 'prospect', 'call'),
-('Rahul Gupta', 'rahul@enterprise.com', '+918765432109', NULL, 'Enterprise Ltd', 'lead', 'email'),
-('Sneha Iyer', 'sneha@business.in', '+917654321098', '+917654321098', 'Business Inc', 'customer', 'manual');

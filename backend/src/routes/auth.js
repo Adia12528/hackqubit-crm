@@ -49,28 +49,8 @@ router.post('/login', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Login error (Database offline):', err.message);
-    // Allow default admin credentials if database is offline in development
-    if (req.body?.email?.toLowerCase() === 'admin@hackqubit.com' && req.body?.password === 'Admin@123') {
-      const token = jwt.sign(
-        { userId: '00000000-0000-0000-0000-000000000001', role: 'super_admin' },
-        process.env.JWT_SECRET || 'hackqubit_super_secret_jwt_key_2024_change_in_prod',
-        { expiresIn: '7d' }
-      );
-      return res.json({
-        token,
-        user: {
-          id: '00000000-0000-0000-0000-000000000001',
-          email: 'admin@hackqubit.com',
-          full_name: 'Super Admin',
-          role: 'super_admin',
-          role_level: 1,
-          permissions: { '*': true },
-          avatar_url: null,
-        },
-      });
-    }
-    res.status(500).json({ error: 'Database offline and credentials not recognized' });
+    console.error('Login error:', err.message);
+    res.status(500).json({ error: 'Authentication service unavailable. Please try again.' });
   }
 });
 
@@ -88,7 +68,7 @@ router.post('/register', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Cannot create user with higher privileges' });
     }
 
-    const hash = await bcrypt.hash(password, 10);
+    const hash = await bcrypt.hash(password, 12);
     const { rows } = await pool.query(
       `INSERT INTO users (email, password_hash, full_name, role_id, phone)
        VALUES ($1, $2, $3, $4, $5) RETURNING id, email, full_name, role_id`,

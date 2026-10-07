@@ -30,30 +30,6 @@ import {
   Eye
 } from 'lucide-react';
 
-// Mock data for demo (fallback when API not connected)
-const MOCK_STATS = {
-  kpis: {
-    contacts: { total: 1248, leads: 342, customers: 586, new_this_week: 43 },
-    calls: { total: 2847, avg_duration: 287, inbound: 1231, outbound: 1616, this_week: 215 },
-    whatsapp: { total: 4523, received: 2100 },
-    emails: { total: 892 },
-    sms: { total: 1203 },
-    deals: { total: 37, total_value: 4850000, won: 18, lost: 5 },
-  },
-  channelActivity: Array.from({ length: 30 }, (_, i) => ({
-    date: format(subDays(new Date(), 29 - i), 'MMM dd'),
-    call: Math.floor(Math.random() * 40 + 10),
-    whatsapp: Math.floor(Math.random() * 80 + 20),
-    email: Math.floor(Math.random() * 30 + 5),
-    sms: Math.floor(Math.random() * 20 + 3),
-  })),
-  topAgents: [
-    { full_name: 'Arjun Mehta', calls: 142, whatsapp_msgs: 89 },
-    { full_name: 'Priya Singh', calls: 118, whatsapp_msgs: 203 },
-    { full_name: 'Rahul Sharma', calls: 97, whatsapp_msgs: 67 },
-  ],
-};
-
 function KPICard({ icon: Icon, label, value, change }) {
   return (
     <div className="kpi-card">
@@ -78,19 +54,45 @@ const CHANNEL_COLORS = {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState(MOCK_STATS);
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState(null);
   const [viewMode, setViewMode] = useState('full'); // 'full', 'analytics', 'architecture'
 
   useEffect(() => {
+    setStatsLoading(true);
     api.get('/analytics/dashboard')
-      .then(({ data }) => setStats(data))
-      .catch(() => {}); // fallback to mock
+      .then(({ data }) => { setStats(data); setStatsError(null); })
+      .catch((err) => {
+        console.error('Dashboard analytics error:', err.message);
+        setStatsError('Could not load analytics data. Ensure the backend and database are running.');
+      })
+      .finally(() => setStatsLoading(false));
   }, []);
 
   const kpis = stats?.kpis || {};
 
   return (
     <div>
+      {/* Error Banner */}
+      {statsError && (
+        <div style={{
+          background: 'rgba(239,68,68,0.1)',
+          border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: '10px',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '13px',
+          color: '#F87171'
+        }}>
+          <Server size={15} />
+          <span>{statsError}</span>
+        </div>
+      )}
+
       {/* Welcome & System Status Header */}
       <div style={{
         background: 'var(--bg-card)',

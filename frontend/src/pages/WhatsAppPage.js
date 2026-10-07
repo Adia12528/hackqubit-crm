@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Send, MessageSquare } from 'lucide-react';
+import { Send, MessageSquare, AlertCircle } from 'lucide-react';
 
 export default function WhatsAppPage() {
   const [contacts, setContacts] = useState([]);
@@ -10,14 +10,8 @@ export default function WhatsAppPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const chatEndRef = useRef(null);
-
-  const MOCK_MESSAGES = [
-    { id: '1', direction: 'inbound', message_type: 'text', content: 'Hi, I saw your product demo. Can you share the pricing structure?', created_at: new Date(Date.now() - 3600000).toISOString() },
-    { id: '2', direction: 'outbound', message_type: 'text', content: 'Hello! Sure thing. We offer flexible tiers starting from Starter up to Enterprise. Are you interested in the self-hosted deployment?', created_at: new Date(Date.now() - 3200000).toISOString() },
-    { id: '3', direction: 'inbound', message_type: 'text', content: 'Yes, full data sovereignty is mandatory for our compliance team. Need MinIO on-prem.', created_at: new Date(Date.now() - 1800000).toISOString() },
-    { id: '4', direction: 'outbound', message_type: 'text', content: 'HackQubit CRM is 100% Docker self-hosted with S3/MinIO persistent call recordings and 5-tier RBAC.', created_at: new Date(Date.now() - 600000).toISOString() },
-  ];
 
   useEffect(() => {
     api.get('/contacts')
@@ -26,27 +20,26 @@ export default function WhatsAppPage() {
         setContacts(list);
         if (list.length > 0) setActiveContact(list[0]);
       })
-      .catch(() => {
-        const dummy = [
-          { id: '1', full_name: 'Arjun Sharma', phone: '+919876543210', whatsapp_number: '+919876543210', company: 'TechCorp India' },
-          { id: '2', full_name: 'Priya Patel', phone: '+919123456789', whatsapp_number: '+919123456789', company: 'Startup IO' },
-          { id: '4', full_name: 'Sneha Iyer', phone: '+917654321098', whatsapp_number: '+917654321098', company: 'Business Inc' },
-        ];
-        setContacts(dummy);
-        setActiveContact(dummy[0]);
+      .catch((err) => {
+        setLoadError('Could not load contacts. Check that the backend and database are running.');
+        console.error('WhatsApp contacts load error:', err.message);
       });
   }, []);
 
   useEffect(() => {
     if (!activeContact) return;
     api.get(`/whatsapp/messages?contact_id=${activeContact.id}`)
-      .then(({ data }) => setMessages(data.messages && data.messages.length ? data.messages : MOCK_MESSAGES))
-      .catch(() => setMessages(MOCK_MESSAGES));
+      .then(({ data }) => setMessages(data.messages || []))
+      .catch((err) => {
+        console.error('WhatsApp messages load error:', err.message);
+        setMessages([]);
+      });
   }, [activeContact]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -71,8 +64,8 @@ export default function WhatsAppPage() {
         message: textToSend
       });
       toast.success('WhatsApp message delivered');
-    } catch {
-      toast.error('Simulation: Meta API token required for live dispatch');
+    } catch (err) {
+      toast.error('Failed to send message. Check WhatsApp API token configuration.');
     } finally {
       setSending(false);
     }
@@ -91,6 +84,12 @@ export default function WhatsAppPage() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loadError && (
+            <div style={{ padding: '16px', color: '#F87171', fontSize: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <span>{loadError}</span>
+            </div>
+          )}
           {contacts.map(c => {
             const isSelected = activeContact?.id === c.id;
             return (

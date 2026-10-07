@@ -17,27 +17,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    try {
-      const { data } = await api.post('/auth/login', { email, password });
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setUser(data.user);
-      return data.user;
-    } catch (err) {
-      // If backend is not running yet, allow demo login
-      console.warn('Backend unavailable, entering Demo Mode:', err.message);
-      const demoUser = {
-        id: 'demo-super-admin',
-        email: email || 'admin@hackqubit.com',
-        full_name: 'Super Admin (Demo)',
-        role_name: 'super_admin',
-        role_level: 1,
-      };
-      localStorage.setItem('token', 'demo_jwt_token_local');
-      localStorage.setItem('user', JSON.stringify(demoUser));
-      setUser(demoUser);
-      return demoUser;
-    }
+    const { data } = await api.post('/auth/login', { email, password });
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data.user;
   };
 
   const logout = () => {

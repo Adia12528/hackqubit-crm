@@ -9,47 +9,33 @@ const authenticate = async (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'No token provided' });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'hackqubit_super_secret_jwt_key_2024_change_in_prod');
-    
-    // Fast path for dev demo admin
-    if (decoded.userId === '00000000-0000-0000-0000-000000000001' || token === 'demo_jwt_token_local') {
-      req.user = {
-        id: decoded.userId || '00000000-0000-0000-0000-000000000001',
-        email: 'admin@hackqubit.com',
-        full_name: 'Super Admin',
-        role_name: 'super_admin',
-        role_level: 1,
-        permissions: { '*': true },
-      };
-      return next();
+    if (!process.env.JWT_SECRET) {
+      console.error('FATAL: JWT_SECRET environment variable is not set');
+      return res.status(500).json({ error: 'Server misconfiguration' });
     }
 
-    try {
-      // Fetch fresh user + role from DB
-      const { rows } = await pool.query(
-        `SELECT u.*, r.name as role_name, r.level as role_level, r.permissions
-         FROM users u JOIN roles r ON u.role_id = r.id
-         WHERE u.id = $1 AND u.is_active = true`,
-        [decoded.userId]
-      );
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      if (!rows[0]) return res.status(401).json({ error: 'User not found or inactive' });
-      req.user = rows[0];
-      next();
-    } catch (dbErr) {
-      // If DB is offline but JWT is valid, continue with fallback user context
-      req.user = {
-        id: decoded.userId,
-        email: 'admin@hackqubit.com',
-        full_name: 'Super Admin (Offline Mode)',
-        role_name: decoded.role || 'super_admin',
-        role_level: 1,
-        permissions: { '*': true },
-      };
-      next();
-    }
+    // Fetch fresh user + role from DB on every request
+    const { rows } = await pool.query(
+      `SELECT u.*, r.name as role_name, r.level as role_level, r.permissions
+       FROM users u JOIN roles r ON u.role_id = r.id
+       WHERE u.id = $1 AND u.is_active = true`,
+      [decoded.userId]
+    );
+
+    if (!rows[0]) return res.status(401).json({ error: 'User not found or inactive' });
+    req.user = rows[0];
+    next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired. Please log in again.' });
+    }
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    console.error('Auth middleware error:', err.message);
+    return res.status(500).json({ error: 'Authentication error' });
   }
 };
 
