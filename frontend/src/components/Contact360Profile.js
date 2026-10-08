@@ -27,7 +27,12 @@ import {
   Zap,
   Globe,
   MoreVertical,
-  X
+  X,
+  ExternalLink,
+  RefreshCw,
+  TrendingUp,
+  Activity,
+  ShieldCheck
 } from 'lucide-react';
 
 import SendEverywhereModal from './SendEverywhereModal';
@@ -46,7 +51,13 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
   const [directChannelModal, setDirectChannelModal] = useState(null); // 'whatsapp' | 'email' | 'sms' | 'call'
   const [directMessageText, setDirectMessageText] = useState('');
   const [directSubject, setDirectSubject] = useState('');
+  const [directToAddress, setDirectToAddress] = useState('');   // editable To field for email
+  const [directCcAddress, setDirectCcAddress] = useState('');   // optional CC
   const [sendingDirect, setSendingDirect] = useState(false);
+  const [showSocialActions, setShowSocialActions] = useState(false);
+  // Conversation-tab email fields
+  const [convEmailTo, setConvEmailTo] = useState('');
+  const [convEmailSubject, setConvEmailSubject] = useState('');
 
   // New Note / Task / Deal inline state
   const [noteForm, setNoteForm] = useState({ title: '', content: '' });
@@ -98,6 +109,38 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
   }
 
   const { contact, channels = [], timeline = [], deals = [], notes = [], tasks = [], offers = [], campaigns = [], metrics = {} } = data;
+  const pendingTasks = tasks.filter(task => task.status !== 'completed');
+  const connectedChannels = [
+    { key: 'whatsapp', label: 'WhatsApp', value: contact.whatsapp_number || channels.find(ch => ch.channel === 'whatsapp')?.identifier, icon: MessageSquare, color: '#25D366' },
+    { key: 'sms', label: 'SMS / Phone', value: contact.phone || channels.find(ch => ['sms', 'phone'].includes(ch.channel))?.identifier, icon: Smartphone, color: '#F59E0B' },
+    { key: 'email', label: 'Email', value: contact.email || channels.find(ch => ch.channel === 'email')?.identifier, icon: Mail, color: '#3B82F6' },
+  ];
+  const readyChannels = connectedChannels.filter(channel => channel.value).length;
+  const engagementScore = Math.min(100, Math.round(
+    ((metrics.totalInteractions || timeline.length || 0) * 4) +
+    (readyChannels * 18) +
+    (deals.length * 8)
+  ));
+  const latestActivity = timeline[0]?.occurred_at
+    ? formatDistanceToNow(new Date(timeline[0].occurred_at), { addSuffix: true })
+    : 'No activity yet';
+
+  const openSmsComposer = (text = `Hi ${contact.full_name || 'there'}, `) => {
+    const digits = (contact.phone || '').replace(/\D/g, '');
+    if (!digits) {
+      toast.error('Add a phone number before opening SMS');
+      return;
+    }
+    window.location.href = `sms:+${digits}?body=${encodeURIComponent(text)}`;
+  };
+
+  const openEmailModal = () => {
+    setDirectToAddress(contact.email || '');
+    setDirectSubject('');
+    setDirectCcAddress('');
+    setDirectMessageText('');
+    setDirectChannelModal('email');
+  };
 
   // Handler for direct channel send
   const handleSendDirect = async () => {
@@ -119,13 +162,33 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
         });
         toast.success('SMS message sent');
       } else if (directChannelModal === 'email') {
-        await api.post('/emails/send', {
+        const toAddr = directToAddress.trim();
+        if (!toAddr) {
+          toast.error('Please enter a recipient email address.');
+          setSendingDirect(false);
+          return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(toAddr)) {
+          toast.error('Invalid email address format.');
+          setSendingDirect(false);
+          return;
+        }
+        const ccList = directCcAddress
+          ? directCcAddress.split(',').map(s => s.trim()).filter(Boolean)
+          : [];
+        const resp = await api.post('/emails/send', {
           contact_id: contact.id,
-          to_address: contact.email,
-          subject: directSubject || 'Message from HackQubit CRM',
+          to_address: toAddr,
+          subject: directSubject.trim() || `Message for ${contact.full_name}`,
           body: directMessageText,
+          cc_addresses: ccList.length ? ccList : undefined,
         });
-        toast.success('Email dispatched');
+        if (resp.data.status === 'sent') {
+          toast.success(`Email dispatched to ${toAddr} ✓`);
+        } else {
+          toast.error(resp.data.error || 'Email dispatch failed');
+        }
       } else if (directChannelModal === 'call') {
         await api.post('/calls/log', {
           contact_id: contact.id,
@@ -141,9 +204,12 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
       setDirectChannelModal(null);
       setDirectMessageText('');
       setDirectSubject('');
+      setDirectToAddress('');
+      setDirectCcAddress('');
       fetchProfile();
     } catch (err) {
-      toast.error('Dispatch failed. Check channel credentials.');
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Dispatch failed. Check channel credentials.';
+      toast.error(errorMsg);
     } finally {
       setSendingDirect(false);
     }
@@ -168,18 +234,29 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
           content: convReplyText,
         });
       } else if (convChannel === 'email') {
+        const toAddr = (convEmailTo || contact.email || '').trim();
+        if (!toAddr) {
+          toast.error('Enter a recipient email address above.');
+          setReplying(false);
+          return;
+        }
         await api.post('/emails/send', {
           contact_id: contact.id,
-          to_address: contact.email,
-          subject: `Re: Update for ${contact.full_name}`,
+          to_address: toAddr,
+          subject: convEmailSubject.trim() || `Re: Update for ${contact.full_name}`,
           body: convReplyText,
         });
       }
-      toast.success(`Sent via ${convChannel}`);
+      toast.success(`Sent via ${convChannel} ✓`);
       setConvReplyText('');
+      if (convChannel === 'email') {
+        setConvEmailTo(contact.email || '');
+        setConvEmailSubject('');
+      }
       fetchProfile();
     } catch (err) {
-      toast.error('Reply dispatch failed.');
+      const msg = err.response?.data?.error || 'Reply dispatch failed.';
+      toast.error(msg);
     } finally {
       setReplying(false);
     }
@@ -252,10 +329,43 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
     }
   };
 
+  const encodedMessage = encodeURIComponent(`Hi ${contact.full_name || 'there'}, `);
+  const phoneDigits = (contact.whatsapp_number || contact.phone || '').replace(/\D/g, '');
+  const socialActions = [
+    {
+      label: 'WhatsApp Web',
+      detail: 'Open a pre-filled chat',
+      color: '#25D366',
+      icon: MessageSquare,
+      href: phoneDigits ? `https://wa.me/${phoneDigits}?text=${encodedMessage}` : null,
+    },
+    {
+      label: 'SMS app',
+      detail: 'Open device composer',
+      color: '#F59E0B',
+      icon: Smartphone,
+      href: phoneDigits ? `sms:+${phoneDigits}?body=${encodedMessage}` : null,
+    },
+    {
+      label: 'Email client',
+      detail: 'Open mail composer',
+      color: '#3B82F6',
+      icon: Mail,
+      href: contact.email ? `mailto:${contact.email}?subject=${encodeURIComponent(`Message for ${contact.full_name}`)}&body=${encodedMessage}` : null,
+    },
+    {
+      label: 'Telegram share',
+      detail: 'Share via Telegram',
+      color: '#229ED9',
+      icon: Send,
+      href: `https://t.me/share/url?url=${encodeURIComponent(window.location.origin)}&text=${encodedMessage}`,
+    },
+  ];
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="customer-360-shell" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 360 HEADER */}
-      <div style={{
+      <div className="customer-360-header" style={{
         background: 'var(--bg-card)',
         borderBottom: '1px solid var(--border)',
         padding: '20px 24px',
@@ -263,7 +373,7 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           {/* Avatar & Core Identity */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{
+            <div className="customer-360-avatar" style={{
               width: '64px', height: '64px', borderRadius: '50%',
               background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -280,8 +390,8 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
               }} />
             </div>
 
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="customer-360-identity">
+              <div className="customer-360-name-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <h1 style={{ fontSize: '20px', fontWeight: '800', letterSpacing: '-0.01em' }}>
                   {contact.full_name}
                 </h1>
@@ -290,7 +400,7 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px' }}>
+              <div className="customer-360-subline" style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px' }}>
                 {contact.company && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Building size={14} /> {contact.company}
@@ -328,10 +438,15 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
           </div>
 
           {/* 360 Metric Highlights */}
-          <div style={{ display: 'flex', gap: '16px', background: 'var(--bg-secondary)', padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+          <div className="customer-360-metrics" style={{ display: 'flex', gap: '16px', background: 'var(--bg-secondary)', padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--border)' }}>
             <div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Deal Value</div>
               <div style={{ fontSize: '15px', fontWeight: '700', color: '#10B981' }}>₹{metrics.totalDealValue || 0}</div>
+            </div>
+            <div className="customer-360-metric-refresh">
+              <button className="btn btn-ghost btn-sm" title="Refresh profile" onClick={fetchProfile}>
+                <RefreshCw size={13} />
+              </button>
             </div>
             <div style={{ width: '1px', background: 'var(--border)' }} />
             <div>
@@ -347,7 +462,7 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
         </div>
 
         {/* QUICK ACTIONS BAR */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="customer-360-actions" style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Individual Communication Triggers */}
           <button className="btn btn-sm" style={{ background: '#10B981', color: 'white' }} onClick={() => setDirectChannelModal('call')}>
             <Phone size={13} /> Call Softphone
@@ -355,10 +470,10 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
           <button className="btn btn-sm" style={{ background: '#25D366', color: 'white' }} onClick={() => setDirectChannelModal('whatsapp')}>
             <MessageSquare size={13} /> WhatsApp
           </button>
-          <button className="btn btn-sm" style={{ background: '#3B82F6', color: 'white' }} onClick={() => setDirectChannelModal('email')}>
+          <button className="btn btn-sm" style={{ background: '#3B82F6', color: 'white' }} onClick={openEmailModal}>
             <Mail size={13} /> Email
           </button>
-          <button className="btn btn-sm" style={{ background: '#F59E0B', color: 'white' }} onClick={() => setDirectChannelModal('sms')}>
+          <button className="btn btn-sm" style={{ background: '#F59E0B', color: 'white' }} onClick={() => openSmsComposer()}>
             <Smartphone size={13} /> SMS
           </button>
 
@@ -371,6 +486,12 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
             onClick={() => setShowSendEverywhere(true)}
           >
             <Zap size={13} /> ⚡ Send Everywhere
+          </button>
+          <button
+            className="btn btn-sm customer-social-toggle"
+            onClick={() => setShowSocialActions((value) => !value)}
+          >
+            <Globe size={13} /> {showSocialActions ? 'Hide web channels' : 'Other platforms'}
           </button>
 
           <button
@@ -393,6 +514,34 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
             <Briefcase size={13} /> Add Deal
           </button>
         </div>
+
+        {showSocialActions && (
+          <div className="customer-social-panel">
+            <div className="customer-social-heading">
+              <div>
+                <strong>Web channel shortcuts</strong>
+                <span>These open the platform composer. Automated background sending requires that platform's API.</span>
+              </div>
+              <Globe size={18} />
+            </div>
+            <div className="customer-social-grid">
+              {socialActions.map(({ label, detail, color, icon: Icon, href }) => (
+                <a
+                  key={label}
+                  className={`customer-social-card ${href ? '' : 'disabled'}`}
+                  href={href || undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => { if (!href) event.preventDefault(); }}
+                >
+                  <span className="customer-social-icon" style={{ color, background: `${color}18` }}><Icon size={16} /></span>
+                  <span><strong>{label}</strong><small>{href ? detail : 'Add a contact identifier first'}</small></span>
+                  <ExternalLink size={13} />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Inline Quick Form Expanders */}
         {showNoteForm && (
@@ -462,7 +611,20 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
       </div>
 
       {/* 360 TAB CONTENT */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+      <div className="customer-360-body" style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+        <div className="customer-health-strip">
+          <div className="customer-health-score">
+            <span className="customer-health-ring" style={{ '--score': `${engagementScore}%` }}>
+              <strong>{engagementScore}</strong>
+              <small>health</small>
+            </span>
+            <span><strong>Customer health</strong><small>Engagement signal from activity, channels and pipeline</small></span>
+          </div>
+          <div className="customer-health-stat"><Activity size={15} /><span><strong>{readyChannels}/3</strong><small>Core channels ready</small></span></div>
+          <div className="customer-health-stat"><TrendingUp size={15} /><span><strong>{deals.length}</strong><small>Open opportunities</small></span></div>
+          <div className="customer-health-stat"><ShieldCheck size={15} /><span><strong>{pendingTasks.length}</strong><small>Pending actions</small></span></div>
+          <div className="customer-health-last"><small>Last activity</small><strong>{latestActivity}</strong></div>
+        </div>
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="grid-2">
@@ -475,28 +637,40 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {channels.length === 0 ? (
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No additional channels registered.</div>
-                ) : (
-                  channels.map(ch => (
-                    <div key={ch.id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {renderChannelIcon(ch.channel)}
-                        <div>
-                          <div style={{ fontWeight: '600', fontSize: '13px' }}>{ch.identifier}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                            {ch.channel} {ch.is_primary && '• Primary'} {ch.is_verified && '• Verified ✓'}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="status-badge status-customer" style={{ fontSize: '10px' }}>Active</span>
-                    </div>
-                  ))
-                )}
+              <div className="customer-channel-list">
+                {connectedChannels.map(({ key, label, value, icon: Icon, color }) => (
+                  <div
+                    className={`customer-channel-card ${value ? 'ready' : 'missing'}`}
+                    key={key}
+                    style={{ cursor: value ? 'pointer' : 'default' }}
+                    onClick={() => {
+                      if (!value) return;
+                      if (key === 'email') openEmailModal();
+                      else if (key === 'whatsapp') setDirectChannelModal('whatsapp');
+                      else if (key === 'sms') openSmsComposer();
+                    }}
+                    title={value ? `Click to send ${label}` : undefined}
+                  >
+                    <span className="customer-channel-icon" style={{ color, background: `${color}18` }}><Icon size={16} /></span>
+                    <span className="customer-channel-copy">
+                      <strong>{label}</strong>
+                      <small>{value || 'Identifier not added'}</small>
+                    </span>
+                    <span className={`customer-channel-state ${value ? 'ready' : 'missing'}`}>
+                      {value ? 'Ready' : 'Missing'}
+                    </span>
+                  </div>
+                ))}
+                {channels.filter(channel => !connectedChannels.some(core => core.key === channel.channel)).map(ch => (
+                  <div className="customer-channel-card ready" key={ch.id}>
+                    <span className="customer-channel-icon" style={{ color: '#A78BFA', background: 'rgba(167,139,250,.12)' }}>{renderChannelIcon(ch.channel)}</span>
+                    <span className="customer-channel-copy">
+                      <strong style={{ textTransform: 'capitalize' }}>{ch.channel}</strong>
+                      <small>{ch.identifier}</small>
+                    </span>
+                    <span className="customer-channel-state ready">Connected</span>
+                  </div>
+                ))}
               </div>
 
               {/* Core Details */}
@@ -560,7 +734,15 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button className={`btn btn-sm ${convChannel === 'whatsapp' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setConvChannel('whatsapp')}>WhatsApp</button>
                   <button className={`btn btn-sm ${convChannel === 'sms' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setConvChannel('sms')}>SMS</button>
-                  <button className={`btn btn-sm ${convChannel === 'email' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setConvChannel('email')}>Email</button>
+                  <button
+                    className={`btn btn-sm ${convChannel === 'email' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => {
+                      setConvChannel('email');
+                      if (!convEmailTo && contact.email) setConvEmailTo(contact.email);
+                    }}
+                  >
+                    Email
+                  </button>
                 </div>
               </div>
 
@@ -600,18 +782,53 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
               </div>
 
               {/* Inline Reply Composer */}
-              <form onSubmit={handleConvReply} style={{ padding: '12px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px' }}>
-                <input
-                  className="form-input"
-                  style={{ flex: 1 }}
-                  placeholder={`Reply via ${convChannel.toUpperCase()}...`}
-                  value={convReplyText}
-                  onChange={e => setConvReplyText(e.target.value)}
-                />
-                <button type="submit" className="btn btn-primary" disabled={replying || !convReplyText.trim()}>
-                  <Send size={14} />
-                  <span>Send</span>
-                </button>
+              <form onSubmit={handleConvReply} style={{ padding: '12px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Email-specific extra fields */}
+                {convChannel === 'email' && (
+                  <>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', display: 'block', marginBottom: '3px' }}>To *</label>
+                        <input
+                          className="form-input"
+                          type="email"
+                          placeholder="recipient@example.com"
+                          value={convEmailTo}
+                          onChange={e => setConvEmailTo(e.target.value)}
+                          onFocus={() => { if (!convEmailTo && contact.email) setConvEmailTo(contact.email); }}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', display: 'block', marginBottom: '3px' }}>Subject</label>
+                      <input
+                        className="form-input"
+                        placeholder={`Re: Update for ${contact.full_name}`}
+                        value={convEmailSubject}
+                        onChange={e => setConvEmailSubject(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    className="form-input"
+                    style={{ flex: 1 }}
+                    placeholder={convChannel === 'email' ? 'Type email body...' : `Reply via ${convChannel.toUpperCase()}...`}
+                    value={convReplyText}
+                    onChange={e => setConvReplyText(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={replying || !convReplyText.trim() || (convChannel === 'email' && !convEmailTo.trim())}
+                  >
+                    <Send size={14} />
+                    <span>{replying ? 'Sending...' : 'Send'}</span>
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -842,45 +1059,105 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
       {/* Direct Single Channel Dispatch Modal */}
       {directChannelModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDirectChannelModal(null)}>
-          <div className="modal" style={{ maxWidth: '500px' }}>
+          <div className="modal" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
               <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {renderChannelIcon(directChannelModal)}
-                <span style={{ textTransform: 'capitalize' }}>Dispatch via {directChannelModal}</span>
+                <span style={{ textTransform: 'capitalize' }}>Send via {directChannelModal}</span>
               </div>
               <button className="modal-close" onClick={() => setDirectChannelModal(null)}><X size={16} /></button>
             </div>
 
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-              Sending to: <strong>{contact.full_name}</strong> ({directChannelModal === 'email' ? contact.email : contact.whatsapp_number || contact.phone})
-            </p>
-
-            {directChannelModal === 'email' && (
-              <div className="form-group">
-                <label className="form-label">Subject</label>
-                <input className="form-input" placeholder="Email subject..." value={directSubject} onChange={e => setDirectSubject(e.target.value)} />
-              </div>
+            {/* Email: editable To + Subject + CC */}
+            {directChannelModal === 'email' ? (
+              <>
+                <div className="form-group">
+                  <label className="form-label">To <span style={{ color: '#EF4444' }}>*</span></label>
+                  <input
+                    className="form-input"
+                    type="email"
+                    placeholder="recipient@example.com"
+                    value={directToAddress}
+                    onChange={e => setDirectToAddress(e.target.value)}
+                    autoFocus
+                  />
+                  {contact.email && directToAddress !== contact.email && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Contact's email: <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer', padding: 0, fontSize: '11px', textDecoration: 'underline' }}
+                        onClick={() => setDirectToAddress(contact.email)}
+                      >{contact.email}</button>
+                    </div>
+                  )}
+                  {directToAddress && directToAddress.includes('@gmai.com') && (
+                    <div style={{ fontSize: '12px', color: '#F59E0B', marginTop: '6px', background: 'rgba(245, 158, 11, 0.1)', padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>⚠️ Typo detected: <code>@gmai.com</code> missing "l"</span>
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: 'var(--blue)', fontWeight: '600', cursor: 'pointer', padding: 0, fontSize: '11px', textDecoration: 'underline' }}
+                        onClick={() => setDirectToAddress(directToAddress.replace('@gmai.com', '@gmail.com'))}
+                      >
+                        Change to @gmail.com
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Subject</label>
+                  <input
+                    className="form-input"
+                    placeholder={`Message for ${contact.full_name}`}
+                    value={directSubject}
+                    onChange={e => setDirectSubject(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">CC <span style={{ fontSize: '11px', fontWeight: '400', color: 'var(--text-muted)' }}>(comma-separated, optional)</span></label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="cc1@example.com, cc2@example.com"
+                    value={directCcAddress}
+                    onChange={e => setDirectCcAddress(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                Sending to: <strong>{contact.full_name}</strong> ({contact.whatsapp_number || contact.phone || 'No number on file'})
+              </p>
             )}
 
             <div className="form-group">
               <label className="form-label">
-                {directChannelModal === 'call' ? 'Call Session Notes' : 'Message'}
+                {directChannelModal === 'call' ? 'Call Session Notes' : 'Message Body'}
               </label>
               <textarea
                 className="form-textarea"
-                rows={4}
+                rows={5}
                 required
-                placeholder={directChannelModal === 'call' ? 'Log notes from softphone session...' : `Type ${directChannelModal} message...`}
+                placeholder={directChannelModal === 'call' ? 'Log notes from softphone session...' : directChannelModal === 'email' ? 'Write your email message here...' : `Type ${directChannelModal} message...`}
                 value={directMessageText}
                 onChange={e => setDirectMessageText(e.target.value)}
               />
             </div>
 
+            {directChannelModal === 'email' && !directToAddress && (
+              <div style={{ fontSize: '12px', color: '#EF4444', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                ⚠️ A recipient email address is required before sending.
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
               <button className="btn btn-ghost" onClick={() => setDirectChannelModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSendDirect} disabled={sendingDirect || !directMessageText.trim()}>
+              <button
+                className="btn btn-primary"
+                onClick={handleSendDirect}
+                disabled={sendingDirect || !directMessageText.trim() || (directChannelModal === 'email' && !directToAddress.trim())}
+              >
                 <Send size={14} />
-                <span>{sendingDirect ? 'Sending...' : 'Send'}</span>
+                <span>{sendingDirect ? 'Sending...' : 'Send Email'}</span>
               </button>
             </div>
           </div>

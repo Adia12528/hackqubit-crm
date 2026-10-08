@@ -13,14 +13,18 @@ export default function OmniChannelPage() {
     e.preventDefault();
     setSending(true);
     try {
-      await api.post('/emails/send', {
+      const { data } = await api.post('/emails/send', {
         to_address: emailForm.to,
         subject: emailForm.subject,
         body: emailForm.body
       });
-      toast.success('Email dispatched via SMTP transporter');
-    } catch {
-      toast.success('Email logged to timeline (SMTP credentials configured)');
+      if (data.status === 'sent' || data.status === 'queued' || data.status === 'delivered') {
+        toast.success('Email sent successfully via SMTP');
+      } else {
+        toast.error(data.error || 'Email was not sent');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Email could not be sent. Check SMTP settings.');
     } finally {
       setSending(false);
     }
@@ -35,8 +39,8 @@ export default function OmniChannelPage() {
         content: smsForm.content
       });
       toast.success('SMS dispatched via Twilio Gateway');
-    } catch {
-      toast.success('SMS logged to timeline (Twilio credentials configured)');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'SMS could not be sent.');
     } finally {
       setSending(false);
     }

@@ -68,7 +68,11 @@ router.post('/send', authorize('agent'), async (req, res) => {
       io,
     });
 
-    res.json(result);
+    if (result.status === 'failed') {
+      return res.status(502).json(result);
+    }
+
+    return res.json(result);
   } catch (err) {
     console.error('Email send error:', err);
     res.status(500).json({ error: 'Server error' });

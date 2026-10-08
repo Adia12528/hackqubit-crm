@@ -2,6 +2,7 @@ const pool = require('../db/pool');
 const whatsappService = require('./communication/whatsapp.service');
 const smsService = require('./communication/sms.service');
 const emailService = require('./communication/email.service');
+const { isSuccessful } = require('./communication/provider.utils');
 
 class OfferService {
   /**
@@ -25,6 +26,13 @@ class OfferService {
     const emailSubject = `Special Offer: ${offer.title} for ${contact.company || firstName}`;
 
     const channelResults = {};
+
+    const allowedChannels = ['whatsapp', 'sms', 'email'];
+    if (!Array.isArray(channels)) throw new Error('channels must be an array');
+    const invalidChannels = channels.filter((channel) => !allowedChannels.includes(channel));
+    if (invalidChannels.length > 0) {
+      throw new Error(`Unsupported channel(s): ${invalidChannels.join(', ')}`);
+    }
 
     for (const ch of channels) {
       try {
@@ -77,10 +85,14 @@ class OfferService {
     }
 
     // Record into contact_offers
+    const statuses = Object.values(channelResults).map((result) => result.status);
+    const hasSuccess = statuses.some(isSuccessful);
+    const hasFailure = statuses.some((status) => status === 'failed');
+    const aggregateStatus = hasSuccess && hasFailure ? 'partial' : (hasSuccess ? 'sent' : 'failed');
     const { rows: coRows } = await pool.query(
       `INSERT INTO contact_offers (offer_id, contact_id, sent_by, channels, status, custom_notes, sent_at)
-       VALUES ($1, $2, $3, $4, 'sent', $5, NOW()) RETURNING *`,
-      [offer_id, contact_id, user_id, channels, custom_notes]
+       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
+      [offer_id, contact_id, user_id, channels, aggregateStatus, custom_notes]
     );
 
     if (io) {
@@ -91,6 +103,7 @@ class OfferService {
     return {
       contact_offer: coRows[0],
       channelResults,
+      status: aggregateStatus,
     };
   }
 }

@@ -176,7 +176,7 @@ export default function ContactsPage() {
   }, [search, statusFilter]);
 
   return (
-    <div style={{
+    <div className="contacts-360-layout" style={{
       display: 'grid',
       gridTemplateColumns: '380px 1fr',
       gap: '16px',
@@ -184,7 +184,7 @@ export default function ContactsPage() {
       overflow: 'hidden',
     }}>
       {/* LEFT: CUSTOMER DIRECTORY & SEARCH */}
-      <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="card contacts-directory" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Search & Actions Header */}
         <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -290,7 +290,7 @@ export default function ContactsPage() {
       </div>
 
       {/* RIGHT: COMPLETE 360° CUSTOMER PROFILE */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="card contacts-profile-pane" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {selectedId ? (
           <Contact360Profile
             contactId={selectedId}

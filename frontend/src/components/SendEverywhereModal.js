@@ -18,12 +18,21 @@ export default function SendEverywhereModal({ contact, onClose, onDispatched }) 
   );
   const [dispatching, setDispatching] = useState(false);
   const [results, setResults] = useState(null);
+  const [dispatchStep, setDispatchStep] = useState(0);
 
   useEffect(() => {
     api.get('/templates')
       .then(({ data }) => setTemplates(data.templates || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!dispatching) return undefined;
+    const timer = window.setInterval(() => {
+      setDispatchStep(step => Math.min(step + 1, 3));
+    }, 450);
+    return () => window.clearInterval(timer);
+  }, [dispatching]);
 
   const handleTemplateChange = (e) => {
     const tId = e.target.value;
@@ -62,6 +71,7 @@ export default function SendEverywhereModal({ contact, onClose, onDispatched }) 
 
     setDispatching(true);
     setResults(null);
+    setDispatchStep(0);
 
     try {
       const { data } = await api.post(`/contacts/${contact.id}/send-everywhere`, {
@@ -70,8 +80,10 @@ export default function SendEverywhereModal({ contact, onClose, onDispatched }) 
         subject,
       });
 
-      setResults(data.results);
-      if (data.success) {
+      setResults({ results: data.results, status: data.status, demo: data.demo });
+      if (data.status === 'partial') {
+        toast.error('Some channels failed. Review the execution report.');
+      } else if (data.success) {
         toast.success('Omnichannel dispatch sent!');
         if (onDispatched) onDispatched();
       } else {
@@ -240,26 +252,46 @@ export default function SendEverywhereModal({ contact, onClose, onDispatched }) 
           <strong style={{ color: 'var(--text-primary)' }}>Personalized Preview:</strong> {previewMessage(message)}
         </div>
 
+        {dispatching && (
+          <div className="omnichannel-progress">
+            <div className="omnichannel-progress-head">
+              <span><RefreshCw size={13} className="spin" /> Secure dispatch pipeline running</span>
+              <strong>{dispatchStep >= 3 ? 'Finalizing' : 'Sending'}</strong>
+            </div>
+            <div className="omnichannel-progress-track"><span style={{ width: `${Math.min(92, 22 + (dispatchStep * 23))}%` }} /></div>
+            <div className="omnichannel-progress-channels">
+              {[
+                ['whatsapp', 'WhatsApp', MessageSquare, '#25D366'],
+                ['sms', 'SMS', Smartphone, '#F59E0B'],
+                ['email', 'Email', Mail, '#3B82F6'],
+              ].filter(([key]) => selectedChannels[key]).map(([key, label, Icon, color], index) => (
+                <span key={key} className={dispatchStep > index ? 'complete' : dispatchStep === index ? 'active' : ''}>
+                  <Icon size={13} style={{ color }} /> {label} {dispatchStep > index ? '✓' : dispatchStep === index ? '...' : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Execution Results Summary */}
         {results && (
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: '8px',
-            padding: '12px',
-            marginBottom: '16px',
-          }}>
-            <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px' }}>Dispatch Execution Report:</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {Object.entries(results).map(([ch, r]) => (
-                <div key={ch} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                  <span style={{ textTransform: 'capitalize', fontWeight: '500' }}>{ch}:</span>
-                  {r.status === 'sent' || r.status === 'delivered' ? (
-                    <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle2 size={13} /> Sent Successfully
+          <div className="omnichannel-results">
+            <div className="omnichannel-results-head">
+              <div><strong>Dispatch completed</strong><small>One click, {Object.keys(results.results || {}).length} channel receipts generated</small></div>
+              {results.demo && <span className="omnichannel-demo-badge">PROTOTYPE RECEIPTS</span>}
+            </div>
+            <div className="omnichannel-result-list">
+              {Object.entries(results.results || results)
+                .filter(([, value]) => value && typeof value === 'object')
+                .map(([ch, r]) => (
+                <div key={ch} className="omnichannel-result-row">
+                  <span><strong style={{ textTransform: 'capitalize' }}>{ch}</strong><small>{r.id ? `Receipt ${String(r.id).slice(0, 18)}` : 'No receipt generated'}</small></span>
+                  {['queued', 'accepted', 'sent', 'delivered'].includes(r.status) ? (
+                    <span className="omnichannel-result-success">
+                      <CheckCircle2 size={13} /> {r.status}
                     </span>
                   ) : (
-                    <span style={{ color: '#EF4444', display: 'flex', alignItems: 'center', gap: '4px' }} title={r.error}>
+                    <span className="omnichannel-result-failed" title={r.error}>
                       <AlertCircle size={13} /> Failed: {r.error || 'Check config'}
                     </span>
                   )}

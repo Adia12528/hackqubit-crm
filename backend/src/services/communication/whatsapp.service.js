@@ -1,11 +1,13 @@
 const axios = require('axios');
 const pool = require('../../db/pool');
+const { isConfigured, providerUnavailable, isDemoMode, getDemoRecipient } = require('./provider.utils');
 
 class WhatsAppService {
   /**
    * Send WhatsApp message
    */
   async sendMessage({ contact_id, agent_id, phone_number, message, message_type = 'text', template_name, template_params, io }) {
+    phone_number = getDemoRecipient(phone_number);
     let waMessageId = null;
     let status = 'sent';
     let errorMessage = null;
@@ -30,14 +32,21 @@ class WhatsAppService {
     }
 
     // Attempt Meta API call if configured
-    const hasConfig = process.env.WHATSAPP_ACCESS_TOKEN && 
-                      process.env.WHATSAPP_PHONE_NUMBER_ID && 
-                      !process.env.WHATSAPP_ACCESS_TOKEN.startsWith('CHANGE_ME');
+    const hasConfig = isConfigured(
+      process.env.WHATSAPP_ACCESS_TOKEN,
+      process.env.WHATSAPP_PHONE_NUMBER_ID,
+      process.env.WHATSAPP_API_URL,
+    );
 
-    if (hasConfig) {
+    if (isDemoMode()) {
+      waMessageId = `demo_wa_${Date.now()}`;
+      status = 'sent';
+    } else if (hasConfig) {
       try {
+        const apiBaseUrl = (process.env.WHATSAPP_API_URL || 'https://graph.facebook.com/v18.0')
+          .replace(/\/+$/, '');
         const response = await axios.post(
-          `${process.env.WHATSAPP_API_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+          `${apiBaseUrl}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
           payload,
           {
             headers: {
@@ -51,12 +60,20 @@ class WhatsAppService {
       } catch (apiErr) {
         console.error('WhatsApp API error:', apiErr.response?.data || apiErr.message);
         status = 'failed';
-        errorMessage = apiErr.response?.data?.error?.message || apiErr.message;
+        const apiError = apiErr.response?.data?.error;
+        errorMessage = apiError?.message || apiErr.message;
+        if (apiError?.code === 2388103) {
+          errorMessage = 'This phone number belongs to another WhatsApp account. Use the phone number ID and token from the same WhatsApp Business Account, or remove the number from the other account in Meta Business Manager.';
+        }
       }
     } else {
-      // Graceful simulated delivery when tokens are template placeholders
-      waMessageId = `mock_wa_${Date.now()}`;
-      status = 'sent';
+      if (process.env.MOCK_PROVIDERS === 'true') {
+        waMessageId = `mock_wa_${Date.now()}`;
+        status = 'sent';
+      } else {
+        status = 'failed';
+        errorMessage = providerUnavailable('WhatsApp').error;
+      }
     }
 
     // Store in DB

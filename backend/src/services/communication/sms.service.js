@@ -1,21 +1,47 @@
 const axios = require('axios');
 const pool = require('../../db/pool');
+const { isConfigured, providerUnavailable, isDemoMode, getDemoRecipient } = require('./provider.utils');
+const msg91Service = require('./msg91.service');
 
 class SMSService {
   /**
    * Send SMS message
    */
   async sendMessage({ contact_id, agent_id, phone_number, content, io }) {
+    phone_number = getDemoRecipient(phone_number);
     let twilioSid = null;
     let status = 'sent';
     let errorMessage = null;
 
-    const hasConfig = process.env.TWILIO_ACCOUNT_SID && 
-                      process.env.TWILIO_AUTH_TOKEN && 
-                      process.env.TWILIO_PHONE_NUMBER &&
-                      !process.env.TWILIO_ACCOUNT_SID.startsWith('CHANGE_ME');
+    const hasMsg91Config = isConfigured(
+      process.env.MSG91_AUTH_KEY,
+      process.env.MSG91_FLOW_TEMPLATE_ID,
+    );
+    const hasTwilioConfig = isConfigured(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN,
+      process.env.TWILIO_PHONE_NUMBER,
+    );
 
-    if (hasConfig) {
+    if (isDemoMode()) {
+      twilioSid = `demo_sms_${Date.now()}`;
+      status = 'sent';
+    } else if ((process.env.SMS_PROVIDER || 'msg91').toLowerCase() === 'msg91') {
+      if (!hasMsg91Config) {
+        status = 'failed';
+        errorMessage = 'MSG91 is not configured. Add MSG91_AUTH_KEY and MSG91_FLOW_TEMPLATE_ID.';
+      } else {
+        try {
+          const response = await msg91Service.sendMessage({ phone_number, content });
+          twilioSid = response.providerId;
+          status = response.status;
+        } catch (msg91Err) {
+          console.error('MSG91 error:', msg91Err.response?.data || msg91Err.message);
+          status = 'failed';
+          errorMessage = msg91Err.response?.data?.message || msg91Err.message;
+        }
+      }
+    } else if (hasTwilioConfig) {
       try {
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
         const response = await axios.post(
@@ -41,9 +67,13 @@ class SMSService {
         errorMessage = twilioErr.response?.data?.message || twilioErr.message;
       }
     } else {
-      // Mock delivery when twilio not configured
-      twilioSid = `mock_sms_${Date.now()}`;
-      status = 'sent';
+      if (process.env.MOCK_PROVIDERS === 'true') {
+        twilioSid = `mock_sms_${Date.now()}`;
+        status = 'sent';
+      } else {
+        status = 'failed';
+        errorMessage = providerUnavailable('SMS provider').error;
+      }
     }
 
     const { rows } = await pool.query(

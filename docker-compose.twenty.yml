@@ -1,0 +1,369 @@
+version: "3.9"
+
+# ============================================================
+#  HackQubit CRM — Full Stack Docker Compose
+#  Services: Twenty CRM · Chatwoot · n8n · MinIO · Asterisk
+#            PostgreSQL (x2) · Redis (x2)
+# ============================================================
+
+networks:
+  crm-net:
+    driver: bridge
+
+volumes:
+  twenty-db-data:
+  twenty-redis-data:
+  twenty-server-local-data:
+  minio-data:
+  chatwoot-db-data:
+  chatwoot-redis-data:
+  chatwoot-storage:
+  n8n-data:
+  asterisk-conf:
+  asterisk-recordings:
+
+# ─────────────────────────────────────────────
+#  TWENTY CRM — Core CRM Platform
+# ─────────────────────────────────────────────
+services:
+
+  # ---------- PostgreSQL for Twenty ----------
+  twenty-db:
+    image: twentycrm/twenty-postgres-spilo:latest
+    container_name: twenty-db
+    restart: unless-stopped
+    networks:
+      - crm-net
+    volumes:
+      - twenty-db-data:/home/postgres/pgdata
+    environment:
+      POSTGRES_USER: ${TWENTY_DB_USER:-twenty}
+      POSTGRES_PASSWORD: ${TWENTY_DB_PASSWORD:-twenty_secret}
+      POSTGRES_DB: ${TWENTY_DB_NAME:-twenty}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TWENTY_DB_USER:-twenty} -d ${TWENTY_DB_NAME:-twenty}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Redis for Twenty ----------
+  twenty-redis:
+    image: redis:7-alpine
+    container_name: twenty-redis
+    restart: unless-stopped
+    networks:
+      - crm-net
+    volumes:
+      - twenty-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- Twenty CRM Server ----------
+  twenty-server:
+    image: twentycrm/twenty:${TWENTY_VERSION:-latest}
+    container_name: twenty-server
+    restart: unless-stopped
+    networks:
+      - crm-net
+    ports:
+      - "3000:3000"
+    depends_on:
+      twenty-db:
+        condition: service_healthy
+      twenty-redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - twenty-server-local-data:/app/packages/twenty-server/.local-storage
+    environment:
+      # Server
+      PORT: 3000
+      SERVER_URL: ${SERVER_URL:-http://localhost:3000}
+      FRONT_DOMAIN: ${FRONT_DOMAIN:-localhost}
+      # Database
+      PG_DATABASE_URL: postgres://${TWENTY_DB_USER:-twenty}:${TWENTY_DB_PASSWORD:-twenty_secret}@twenty-db:5432/${TWENTY_DB_NAME:-twenty}
+      # Redis
+      REDIS_URL: redis://twenty-redis:6379
+      # Security
+      APP_SECRET: ${TWENTY_APP_SECRET:-change_me_to_random_secret_32chars}
+      # Storage — MinIO (S3-compatible)
+      STORAGE_TYPE: s3
+      STORAGE_S3_REGION: us-east-1
+      STORAGE_S3_BUCKET: twenty-storage
+      STORAGE_S3_ENDPOINT: http://minio:9000
+      STORAGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin_secret}
+      # Email
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@hackqubit.local}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-HackQubit CRM}
+      EMAIL_SYSTEM_ADDRESS: ${EMAIL_SYSTEM_ADDRESS:-system@hackqubit.local}
+      # SMTP
+      EMAIL_DRIVER: ${EMAIL_DRIVER:-smtp}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-mailhog}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-1025}
+      # Misc
+      IS_CONFIG_VARIABLES_IN_DB_ENABLED: "false"
+      SIGN_IN_PREFILLED: "true"
+      DISABLE_DB_MIGRATIONS: "false"
+    command: ["node", "packages/twenty-server/dist/src/main.js"]
+
+  # ---------- Twenty CRM Worker ----------
+  twenty-worker:
+    image: twentycrm/twenty:${TWENTY_VERSION:-latest}
+    container_name: twenty-worker
+    restart: unless-stopped
+    networks:
+      - crm-net
+    depends_on:
+      twenty-server:
+        condition: service_started
+    volumes:
+      - twenty-server-local-data:/app/packages/twenty-server/.local-storage
+    environment:
+      PG_DATABASE_URL: postgres://${TWENTY_DB_USER:-twenty}:${TWENTY_DB_PASSWORD:-twenty_secret}@twenty-db:5432/${TWENTY_DB_NAME:-twenty}
+      REDIS_URL: redis://twenty-redis:6379
+      APP_SECRET: ${TWENTY_APP_SECRET:-change_me_to_random_secret_32chars}
+      STORAGE_TYPE: s3
+      STORAGE_S3_REGION: us-east-1
+      STORAGE_S3_BUCKET: twenty-storage
+      STORAGE_S3_ENDPOINT: http://minio:9000
+      STORAGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin_secret}
+      SERVER_URL: ${SERVER_URL:-http://localhost:3000}
+    command: ["node", "packages/twenty-server/dist/src/queue-worker/queue-worker.module.js"]
+
+
+# ─────────────────────────────────────────────
+#  MINIO — S3-Compatible Object Storage
+#  Stores: call recordings, attachments, docs
+# ─────────────────────────────────────────────
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    networks:
+      - crm-net
+    ports:
+      - "9000:9000"   # S3 API endpoint
+      - "9001:9001"   # MinIO Web Console
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_secret}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ---------- MinIO bucket initializer ----------
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: minio-init
+    networks:
+      - crm-net
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin_secret};
+      mc mb --ignore-existing local/twenty-storage;
+      mc mb --ignore-existing local/chatwoot-storage;
+      mc mb --ignore-existing local/call-recordings;
+      mc policy set public local/twenty-storage;
+      echo 'Buckets created successfully';
+      "
+    restart: on-failure
+
+
+# ─────────────────────────────────────────────
+#  CHATWOOT — Omni-Channel Communication Hub
+#  Email · WhatsApp · Voice · SMS
+# ─────────────────────────────────────────────
+
+  # ---------- PostgreSQL for Chatwoot ----------
+  chatwoot-db:
+    image: postgres:15-alpine
+    container_name: chatwoot-db
+    restart: unless-stopped
+    networks:
+      - crm-net
+    volumes:
+      - chatwoot-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${CHATWOOT_DB_USER:-chatwoot}
+      POSTGRES_PASSWORD: ${CHATWOOT_DB_PASSWORD:-chatwoot_secret}
+      POSTGRES_DB: ${CHATWOOT_DB_NAME:-chatwoot}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CHATWOOT_DB_USER:-chatwoot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Redis for Chatwoot ----------
+  chatwoot-redis:
+    image: redis:7-alpine
+    container_name: chatwoot-redis
+    restart: unless-stopped
+    networks:
+      - crm-net
+    volumes:
+      - chatwoot-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- Chatwoot Rails App ----------
+  chatwoot-app:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot-app
+    restart: unless-stopped
+    networks:
+      - crm-net
+    ports:
+      - "3001:3000"
+    depends_on:
+      chatwoot-db:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+    volumes:
+      - chatwoot-storage:/app/storage
+    environment:
+      # Core
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY:-change_this_to_64_char_secret}
+      FRONTEND_URL: ${CHATWOOT_FRONTEND_URL:-http://localhost:3001}
+      # Database
+      DATABASE_URL: postgres://${CHATWOOT_DB_USER:-chatwoot}:${CHATWOOT_DB_PASSWORD:-chatwoot_secret}@chatwoot-db:5432/${CHATWOOT_DB_NAME:-chatwoot}
+      REDIS_URL: redis://chatwoot-redis:6379
+      # Storage — MinIO (S3)
+      ACTIVE_STORAGE_SERVICE: amazon
+      S3_BUCKET_NAME: chatwoot-storage
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin_secret}
+      AWS_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      FORCE_PATH_STYLE: "true"
+      # Email
+      MAILER_SENDER_EMAIL: ${EMAIL_FROM_ADDRESS:-noreply@hackqubit.local}
+      SMTP_ADDRESS: ${EMAIL_SMTP_HOST:-mailhog}
+      SMTP_PORT: ${EMAIL_SMTP_PORT:-1025}
+      SMTP_USERNAME: ${EMAIL_SMTP_USER:-}
+      SMTP_PASSWORD: ${EMAIL_SMTP_PASS:-}
+      SMTP_AUTHENTICATION: plain
+      SMTP_ENABLE_STARTTLS_AUTO: "false"
+      # WhatsApp / Twilio (set your real keys via .env)
+      WHATSAPP_CLOUD_BASE_URL: https://graph.facebook.com
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+      # Feature flags
+      ENABLE_ACCOUNT_SIGNUP: "true"
+    command: bundle exec rails server -p 3000 -b 0.0.0.0
+    entrypoint: docker/entrypoints/rails.sh
+
+  # ---------- Chatwoot Sidekiq Worker ----------
+  chatwoot-worker:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot-worker
+    restart: unless-stopped
+    networks:
+      - crm-net
+    depends_on:
+      chatwoot-db:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+    volumes:
+      - chatwoot-storage:/app/storage
+    environment:
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY:-change_this_to_64_char_secret}
+      DATABASE_URL: postgres://${CHATWOOT_DB_USER:-chatwoot}:${CHATWOOT_DB_PASSWORD:-chatwoot_secret}@chatwoot-db:5432/${CHATWOOT_DB_NAME:-chatwoot}
+      REDIS_URL: redis://chatwoot-redis:6379
+      ACTIVE_STORAGE_SERVICE: amazon
+      S3_BUCKET_NAME: chatwoot-storage
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin_secret}
+      AWS_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      FORCE_PATH_STYLE: "true"
+    command: bundle exec sidekiq -C config/sidekiq.yml
+
+
+# ─────────────────────────────────────────────
+#  N8N — Workflow Automation / CRM Bridge
+#  Syncs Chatwoot ↔ Twenty CRM
+# ─────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    networks:
+      - crm-net
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-admin123}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: chatwoot-db
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${CHATWOOT_DB_USER:-chatwoot}
+      DB_POSTGRESDB_PASSWORD: ${CHATWOOT_DB_PASSWORD:-chatwoot_secret}
+      GENERIC_TIMEZONE: Asia/Kolkata
+
+
+# ─────────────────────────────────────────────
+#  MAILHOG — Local SMTP/Email Testing
+# ─────────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    restart: unless-stopped
+    networks:
+      - crm-net
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+
+
+# ─────────────────────────────────────────────
+#  ASTERISK — SIP/WebRTC Voice Gateway
+#  For: Incoming/Outgoing calls + Recording
+# ─────────────────────────────────────────────
+  asterisk:
+    image: andrius/asterisk:latest
+    container_name: asterisk
+    restart: unless-stopped
+    networks:
+      - crm-net
+    ports:
+      - "5060:5060/udp"   # SIP
+      - "5060:5060/tcp"   # SIP TCP
+      - "8088:8088"        # HTTP/WebSocket for WebRTC
+      - "10000-10020:10000-10020/udp"  # RTP media
+    volumes:
+      - asterisk-conf:/etc/asterisk
+      - asterisk-recordings:/var/spool/asterisk/monitor
+    environment:
+      ASTERISK_UID: 1000
+      ASTERISK_GID: 1000

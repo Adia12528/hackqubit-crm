@@ -5,6 +5,7 @@ const identityService = require('../services/identity.service');
 const whatsappService = require('../services/communication/whatsapp.service');
 const smsService = require('../services/communication/sms.service');
 const emailService = require('../services/communication/email.service');
+const { isSuccessful } = require('../services/communication/provider.utils');
 const offerService = require('../services/offer.service');
 
 const router = express.Router();
@@ -229,6 +230,17 @@ router.post('/:id/send-everywhere', authorize('agent'), async (req, res) => {
   try {
     const contactId = req.params.id;
     const { channels = ['whatsapp', 'sms', 'email'], message, subject } = req.body;
+    const allowedChannels = ['whatsapp', 'sms', 'email'];
+    if (!Array.isArray(channels)) {
+      return res.status(400).json({ error: 'channels must be an array' });
+    }
+    const invalidChannels = channels.filter((channel) => !allowedChannels.includes(channel));
+    if (invalidChannels.length > 0) {
+      return res.status(400).json({ error: `Unsupported channel(s): ${invalidChannels.join(', ')}` });
+    }
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
     const io = req.app.get('io');
 
     const { rows } = await pool.query('SELECT * FROM contacts WHERE id = $1 AND is_deleted = false', [contactId]);
@@ -251,7 +263,7 @@ router.post('/:id/send-everywhere', authorize('agent'), async (req, res) => {
             io,
           });
           results.whatsapp = { status: resp.status, id: resp.message?.id, error: resp.error };
-          if (resp.status === 'sent') atLeastOneSuccess = true;
+          if (isSuccessful(resp.status)) atLeastOneSuccess = true;
         } catch (err) {
           results.whatsapp = { status: 'failed', error: err.message };
         }
@@ -273,7 +285,7 @@ router.post('/:id/send-everywhere', authorize('agent'), async (req, res) => {
             io,
           });
           results.sms = { status: resp.status, id: resp.sms?.id, error: resp.error };
-          if (resp.status === 'sent') atLeastOneSuccess = true;
+          if (isSuccessful(resp.status)) atLeastOneSuccess = true;
         } catch (err) {
           results.sms = { status: 'failed', error: err.message };
         }
@@ -295,7 +307,7 @@ router.post('/:id/send-everywhere', authorize('agent'), async (req, res) => {
             io,
           });
           results.email = { status: resp.status, id: resp.email?.id, error: resp.error };
-          if (resp.status === 'sent') atLeastOneSuccess = true;
+          if (isSuccessful(resp.status)) atLeastOneSuccess = true;
         } catch (err) {
           results.email = { status: 'failed', error: err.message };
         }
@@ -308,8 +320,12 @@ router.post('/:id/send-everywhere', authorize('agent'), async (req, res) => {
       io.emit('send_everywhere_completed', { contact_id: contactId, results });
     }
 
-    res.json({
-      success: atLeastOneSuccess,
+    const statuses = Object.values(results).map((result) => result.status);
+    const success = atLeastOneSuccess;
+    res.status(success && statuses.some((status) => status === 'failed') ? 207 : 200).json({
+      success,
+      demo: process.env.DEMO_MODE === 'true' && process.env.MOCK_PROVIDERS === 'true',
+      status: success && statuses.some((status) => status === 'failed') ? 'partial' : (success ? 'sent' : 'failed'),
       results,
       summary: Object.entries(results).map(([ch, r]) => `${ch}: ${r.status}`).join(' | '),
     });

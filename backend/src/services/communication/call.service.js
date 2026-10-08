@@ -1,12 +1,14 @@
 const pool = require('../../db/pool');
 const { v4: uuidv4 } = require('uuid');
 const { BUCKETS, getPresignedUrl, uploadFile } = require('../../config/minio');
+const { getDemoRecipient } = require('./provider.utils');
 
 class CallService {
   /**
    * Start a call session
    */
   async startCall({ contact_id, agent_id, direction, phone_number, sip_call_id, io }) {
+    phone_number = getDemoRecipient(phone_number);
     const callId = uuidv4();
     const { rows } = await pool.query(
       `INSERT INTO call_recordings (id, contact_id, agent_id, direction, phone_number, sip_call_id, 
@@ -41,6 +43,7 @@ class CallService {
    * Log completed call directly
    */
   async logCall({ contact_id, agent_id, direction, phone_number, duration_seconds, notes, call_status, io }) {
+    phone_number = getDemoRecipient(phone_number);
     const { rows } = await pool.query(
       `INSERT INTO call_recordings (contact_id, agent_id, direction, phone_number, 
         duration_seconds, notes, call_status, started_at, ended_at)

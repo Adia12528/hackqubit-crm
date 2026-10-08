@@ -48,6 +48,11 @@ matching Contact/Lead by email address — nothing further to build.
    phone number (or your own verified business number).
 2. Set `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, and a
    `WHATSAPP_VERIFY_TOKEN` (any string you choose) in `.env`.
+   `WHATSAPP_API_URL` must remain the Meta Graph API base URL
+   (`https://graph.facebook.com/v18.0`), not the webhook URL. The phone
+   number ID and access token must be taken from the same WhatsApp Business
+   Account; Meta rejects messages when a number is already registered to a
+   different WhatsApp account.
 3. **Inbound bridge:** a small webhook endpoint (e.g.
    `POST /webhooks/whatsapp`) that Meta calls on every message:
    - Verify the request (Meta's GET challenge on setup, uses
@@ -63,13 +68,37 @@ matching Contact/Lead by email address — nothing further to build.
    POSTs to the bridge, which then calls Meta's
    `POST /{phone-number-id}/messages` Graph API endpoint.
 
-## 3. SMS — gateway bridge
+## 3. SMS — MSG91 Flow API
 
-Same shape as WhatsApp, simpler payloads. Any gateway with inbound
-webhooks + an outbound send API works (Twilio, MSG91, Plivo — swap the
-`SMS_GATEWAY_*` variables in `.env` for whichever you pick). Log every
-message as a Note or custom `SmsMessage` entity linked to the Contact by
-phone number, same as WhatsApp.
+The CRM supports MSG91 as the default SMS provider through its Flow API:
+
+1. Create an MSG91 account and add SMS credits.
+2. Register/approve the sender and DLT template required for the destination
+   country. For India, MSG91 requires an approved Flow template.
+3. Make the template contain one variable named `VAR1`; the CRM puts the
+   message body into that variable.
+4. Add credentials to `backend/.env`:
+
+```env
+SMS_PROVIDER=msg91
+MSG91_AUTH_KEY=your_msg91_auth_key
+MSG91_FLOW_TEMPLATE_ID=your_approved_flow_template_id
+```
+
+The existing endpoints remain unchanged:
+
+```text
+POST /api/sms/send
+POST /api/contacts/:id/send-everywhere
+```
+
+Recipients should use an international number such as `+919031112667`.
+The adapter calls `https://control.msg91.com/api/v5/flow` and returns MSG91's
+request ID as the message receipt. Missing credentials or template
+configuration returns a failed channel result, never a fake success.
+
+Twilio remains available by setting `SMS_PROVIDER=twilio`. Other providers
+can be added as adapters without changing the frontend.
 
 ## 4. Voice calling with recording — the hard one
 
