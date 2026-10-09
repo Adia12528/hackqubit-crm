@@ -13,87 +13,7 @@ import {
   Plus, 
   Clock 
 } from 'lucide-react';
-
-// ========== WebRTC Call Widget ==========
-function CallWidget({ contact, onEnd }) {
-  const [status, setStatus] = useState('connecting'); // connecting | active | ended
-  const [muted, setMuted] = useState(false);
-  const [timer, setTimer] = useState(0);
-  const timerRef = useRef(null);
-  const [notes, setNotes] = useState('');
-
-  useEffect(() => {
-    // Simulate connection (in production: use WebRTC PeerConnection)
-    const t = setTimeout(() => {
-      setStatus('active');
-      timerRef.current = setInterval(() => setTimer(s => s + 1), 1000);
-    }, 1500);
-    return () => { clearTimeout(t); clearInterval(timerRef.current); };
-  }, []);
-
-  const formatTime = (s) => {
-    const m = Math.floor(s / 60).toString().padStart(2, '0');
-    const sec = (s % 60).toString().padStart(2, '0');
-    return `${m}:${sec}`;
-  };
-
-  const handleEnd = async () => {
-    clearInterval(timerRef.current);
-    setStatus('ended');
-    
-    // Log call to backend
-    try {
-      await api.post('/calls/log', {
-        contact_id: contact.id,
-        direction: 'outbound',
-        phone_number: contact.phone,
-        duration_seconds: timer,
-        notes,
-        call_status: 'completed',
-      });
-      toast.success('Call session saved');
-    } catch { toast.error('Failed to save call'); }
-    
-    setTimeout(() => onEnd(), 1000);
-  };
-
-  return (
-    <div className={`call-widget ${status}`}>
-      <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {status === 'connecting' ? 'Establishing Line...' : status === 'active' ? 'Voice Channel Connected' : 'Call Terminated'}
-        </div>
-        <div style={{ fontSize: '15px', fontWeight: '700', marginTop: '4px' }}>{contact.full_name}</div>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{contact.phone}</div>
-      </div>
-
-      {status === 'active' && (
-        <div className="call-timer">{formatTime(timer)}</div>
-      )}
-
-      {status === 'active' && (
-        <textarea
-          className="form-textarea"
-          placeholder="Session notes..."
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          style={{ marginBottom: '12px', fontSize: '12px', minHeight: '60px' }}
-        />
-      )}
-
-      <div className="call-actions">
-        <button className={`call-btn mute`} onClick={() => setMuted(!muted)} title={muted ? 'Unmute' : 'Mute'}>
-          {muted ? <MicOff size={16} /> : <Mic size={16} />}
-        </button>
-        {status === 'active' && (
-          <button className="call-btn end" onClick={handleEnd} title="End call">
-            <PhoneOff size={16} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+import WebRTCCallWidget from '../components/WebRTCCallWidget';
 
 // ========== Call History Table ==========
 export default function CallsPage() {
@@ -112,9 +32,16 @@ export default function CallsPage() {
     { id: '4', contact_name: 'Sneha Iyer', direction: 'outbound', call_status: 'completed', duration_seconds: 623, phone_number: '+917654321098', started_at: new Date(Date.now() - 86400000).toISOString(), notes: 'Onboarding call - went well' },
   ];
 
+  const fetchCalls = () => {
+    api.get('/calls')
+      .then(({ data }) => setCalls(data.calls || []))
+      .catch(() => setCalls(MOCK_CALLS))
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    api.get('/calls').then(({ data }) => setCalls(data.calls)).catch(() => setCalls(MOCK_CALLS)).finally(() => setLoading(false));
-    api.get('/contacts').then(({ data }) => setContacts(data.contacts)).catch(() => {});
+    fetchCalls();
+    api.get('/contacts').then(({ data }) => setContacts(data.contacts || [])).catch(() => {});
   }, []);
 
   const handleInitCall = () => {
@@ -258,7 +185,14 @@ export default function CallsPage() {
 
       {/* Active Call Widget */}
       {activeCall && callContact && (
-        <CallWidget contact={callContact} onEnd={() => { setActiveCall(false); setCallContact(null); }} />
+        <WebRTCCallWidget 
+          contact={callContact} 
+          onEnd={() => { 
+            setActiveCall(false); 
+            setCallContact(null); 
+            fetchCalls();
+          }} 
+        />
       )}
     </div>
   );

@@ -38,6 +38,7 @@ import {
 import SendEverywhereModal from './SendEverywhereModal';
 import SendOfferModal from './SendOfferModal';
 import AddChannelModal from './AddChannelModal';
+import WebRTCCallWidget from './WebRTCCallWidget';
 
 export default function Contact360Profile({ contactId, onBack, onUpdateContact }) {
   const [data, setData] = useState(null);
@@ -48,6 +49,7 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
   const [showSendEverywhere, setShowSendEverywhere] = useState(false);
   const [showSendOffer, setShowSendOffer] = useState(false);
   const [showAddChannel, setShowAddChannel] = useState(false);
+  const [showWebRTCCall, setShowWebRTCCall] = useState(false);
   const [directChannelModal, setDirectChannelModal] = useState(null); // 'whatsapp' | 'email' | 'sms' | 'call'
   const [directMessageText, setDirectMessageText] = useState('');
   const [directSubject, setDirectSubject] = useState('');
@@ -464,8 +466,8 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
         {/* QUICK ACTIONS BAR */}
         <div className="customer-360-actions" style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Individual Communication Triggers */}
-          <button className="btn btn-sm" style={{ background: '#10B981', color: 'white' }} onClick={() => setDirectChannelModal('call')}>
-            <Phone size={13} /> Call Softphone
+          <button className="btn btn-sm" style={{ background: '#10B981', color: 'white' }} onClick={() => setShowWebRTCCall(true)}>
+            <Phone size={13} /> Call Softphone (WebRTC)
           </button>
           <button className="btn btn-sm" style={{ background: '#25D366', color: 'white' }} onClick={() => setDirectChannelModal('whatsapp')}>
             <MessageSquare size={13} /> WhatsApp
@@ -648,6 +650,7 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
                       if (key === 'email') openEmailModal();
                       else if (key === 'whatsapp') setDirectChannelModal('whatsapp');
                       else if (key === 'sms') openSmsComposer();
+                      else if (key === 'phone') setShowWebRTCCall(true);
                     }}
                     title={value ? `Click to send ${label}` : undefined}
                   >
@@ -1162,6 +1165,17 @@ export default function Contact360Profile({ contactId, onBack, onUpdateContact }
             </div>
           </div>
         </div>
+      )}
+
+      {/* WebRTC Voice Softphone Widget */}
+      {showWebRTCCall && (
+        <WebRTCCallWidget
+          contact={contact}
+          onEnd={() => {
+            setShowWebRTCCall(false);
+            fetchProfile();
+          }}
+        />
       )}
     </div>
   );

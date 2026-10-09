@@ -43,6 +43,55 @@ io.on('connection', (socket) => {
     console.log(`👤 User ${userId} joined their room`);
   });
 
+  // WebRTC Voice Calling Signaling
+  socket.on('webrtc_call_init', (data) => {
+    // broadcast or send to specific user room / contact room
+    const target = data.targetUserId ? `user_${data.targetUserId}` : null;
+    if (target) {
+      socket.to(target).emit('webrtc_incoming_call', {
+        fromSocketId: socket.id,
+        callerName: data.callerName,
+        contactId: data.contactId,
+        callId: data.callId,
+      });
+    }
+  });
+
+  socket.on('webrtc_offer', ({ targetSocketId, offer, callId }) => {
+    if (targetSocketId) {
+      socket.to(targetSocketId).emit('webrtc_offer', {
+        fromSocketId: socket.id,
+        offer,
+        callId,
+      });
+    }
+  });
+
+  socket.on('webrtc_answer', ({ targetSocketId, answer, callId }) => {
+    if (targetSocketId) {
+      socket.to(targetSocketId).emit('webrtc_answer', {
+        fromSocketId: socket.id,
+        answer,
+        callId,
+      });
+    }
+  });
+
+  socket.on('webrtc_ice_candidate', ({ targetSocketId, candidate }) => {
+    if (targetSocketId) {
+      socket.to(targetSocketId).emit('webrtc_ice_candidate', {
+        fromSocketId: socket.id,
+        candidate,
+      });
+    }
+  });
+
+  socket.on('webrtc_hangup', ({ targetSocketId, callId }) => {
+    if (targetSocketId) {
+      socket.to(targetSocketId).emit('webrtc_call_ended', { callId });
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`🔌 Client disconnected: ${socket.id}`);
   });

@@ -5,6 +5,10 @@ const migrationSql = `
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
+-- Update call_recordings constraint to allow 'active' and 'ringing' status
+ALTER TABLE call_recordings DROP CONSTRAINT IF EXISTS call_recordings_call_status_check;
+ALTER TABLE call_recordings ADD CONSTRAINT call_recordings_call_status_check CHECK (call_status IN ('active', 'ringing', 'completed', 'missed', 'failed', 'voicemail'));
+
 -- ================================================
 -- CONTACT CHANNELS (Extensible Multi-channel Identity)
 -- ================================================

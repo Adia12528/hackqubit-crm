@@ -10,30 +10,33 @@ class CallService {
   async startCall({ contact_id, agent_id, direction, phone_number, sip_call_id, io }) {
     phone_number = getDemoRecipient(phone_number);
     const callId = uuidv4();
+    const validContactId = contact_id && typeof contact_id === 'string' && contact_id.trim() ? contact_id.trim() : null;
     const { rows } = await pool.query(
       `INSERT INTO call_recordings (id, contact_id, agent_id, direction, phone_number, sip_call_id, 
         call_status, started_at)
        VALUES ($1,$2,$3,$4,$5,$6,'active',NOW()) RETURNING *`,
-      [callId, contact_id, agent_id || null, direction || 'outbound', phone_number, sip_call_id]
+      [callId, validContactId, agent_id || null, direction || 'outbound', phone_number, sip_call_id || null]
     );
 
     const call = rows[0];
 
-    try {
-      await pool.query(
-        `INSERT INTO conversations (contact_id, channel, status, assigned_to, last_message_at, last_message_preview)
-         VALUES ($1, 'call', 'open', $2, NOW(), $3)
-         ON CONFLICT (contact_id, channel) DO UPDATE SET
-           last_message_at = NOW(),
-           last_message_preview = $3,
-           updated_at = NOW()`,
-        [contact_id, agent_id || null, `Active Call (${direction || 'outbound'})`]
-      );
-    } catch (cErr) {}
+    if (validContactId) {
+      try {
+        await pool.query(
+          `INSERT INTO conversations (contact_id, channel, status, assigned_to, last_message_at, last_message_preview)
+           VALUES ($1, 'call', 'open', $2, NOW(), $3)
+           ON CONFLICT (contact_id, channel) DO UPDATE SET
+             last_message_at = NOW(),
+             last_message_preview = $3,
+             updated_at = NOW()`,
+          [validContactId, agent_id || null, `Active Call (${direction || 'outbound'})`]
+        );
+      } catch (cErr) {}
+    }
 
     if (io) {
-      io.emit('call_update', { contact_id, call, action: 'started' });
-      io.emit('inbox_update', { contact_id, channel: 'call', last_message: `Active Call (${direction})` });
+      io.emit('call_update', { contact_id: validContactId, call, action: 'started' });
+      io.emit('inbox_update', { contact_id: validContactId, channel: 'call', last_message: `Active Call (${direction})` });
     }
 
     return call;

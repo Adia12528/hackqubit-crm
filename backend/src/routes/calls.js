@@ -52,6 +52,22 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/calls/webrtc-config - STUN/TURN ICE servers configuration
+router.get('/webrtc-config', (req, res) => {
+  const iceServers = [
+    { urls: process.env.STUN_SERVER || 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ];
+  if (process.env.TURN_SERVER) {
+    iceServers.push({
+      urls: process.env.TURN_SERVER,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+  res.json({ iceServers });
+});
+
 // POST /api/calls/start - log a call start (WebRTC/SIP)
 router.post('/start', authorize('agent'), async (req, res) => {
   try {
@@ -69,7 +85,8 @@ router.post('/start', authorize('agent'), async (req, res) => {
 
     res.status(201).json({ call });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    console.error('Call start error:', err);
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
